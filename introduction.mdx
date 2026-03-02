@@ -5,7 +5,7 @@ description: Welcome to Sabbels Handmade E-Commerce - a full-stack e-commerce pl
 
 # Welcome to Sabbels Handmade E-Commerce
 
-Sabbels Handmade is a modern, full-stack e-commerce platform designed specifically for selling handmade, artisanal products. Built with React 19, Supabase, and Stripe, it provides a complete solution for both customers and shop administrators.
+Sabbels Handmade is a modern, full-stack e-commerce platform designed specifically for selling handmade, artisanal products. Built with React 19, Supabase, and integrated payment processing, it provides a complete solution for both customers and shop administrators.
 
 ## What is Sabbels Handmade?
 
@@ -13,7 +13,7 @@ Sabbels Handmade is a B2C e-commerce platform that enables you to:
 
 - **Showcase handmade products** with rich media, multiple variants, and detailed descriptions
 - **Manage inventory** with size-based variants, stock tracking, and SKU management
-- **Process payments** securely through Stripe with automated order management
+- **Process payments** securely through SumUp integration with automated order management
 - **Serve global customers** with built-in internationalization (German and French)
 - **Control everything** through a powerful admin dashboard
 
@@ -27,7 +27,7 @@ Sabbels Handmade is a B2C e-commerce platform that enables you to:
     Persistent shopping cart with local storage, quantity management, and variant selection
   </Card>
   <Card title="Secure Payments" icon="credit-card" href="/features/payment-processing">
-    Stripe-powered checkout with webhook integration for automated order processing
+    SumUp payment integration with Stripe webhooks for automated order status tracking
   </Card>
   <Card title="Admin Dashboard" icon="gauge" href="/admin-guide/dashboard">
     Comprehensive admin panel for managing products, orders, customers, and inventory
@@ -48,7 +48,7 @@ Sabbels Handmade is built with modern, production-ready technologies:
 - **React 19** with Vite 7 for fast development and optimized builds
 - **React Router 7** for client-side routing
 - **i18next** for internationalization
-- **Stripe.js** for secure payment processing
+- **SumUp** integration for secure payment processing
 - Custom CSS with CSS variables for theming
 
 ### Backend

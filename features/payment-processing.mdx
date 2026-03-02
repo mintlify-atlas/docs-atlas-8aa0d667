@@ -1,11 +1,19 @@
 ---
 title: "Payment Processing"
-description: "Stripe integration with webhooks for secure payment handling"
+description: "Hybrid payment system with SumUp frontend and Stripe backend webhooks"
 ---
 
 ## Overview
 
-Sabbels Handmade uses Stripe for secure payment processing with a complete checkout flow including payment intents, webhooks, and automatic order status management. The system supports multiple currencies and handles the full payment lifecycle from checkout to confirmation.
+Sabbels Handmade uses a hybrid payment architecture:
+- **Frontend**: Customers are redirected to SumUp for payment processing
+- **Backend**: Stripe webhooks handle order status updates and notifications
+
+This approach combines SumUp's simple payment experience with Stripe's robust webhook infrastructure for order management.
+
+<Note>
+The actual payment is processed through SumUp, not Stripe. The backend uses Stripe only for webhook-based order status management. The checkout endpoint creates payment intents but the frontend redirects to an external SumUp payment link.
+</Note>
 
 ## Payment Flow
 

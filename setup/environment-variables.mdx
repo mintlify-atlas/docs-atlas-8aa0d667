@@ -55,23 +55,7 @@ Location: `/client/.env.local`
   **Migration**: Use `VITE_SUPABASE_ANON_KEY` instead.
 </ParamField>
 
-### Stripe Configuration
 
-<ParamField path="VITE_STRIPE_PUBLIC_KEY" type="string" required>
-  Your Stripe publishable key for client-side payments.
-  
-  **Where to find**: Stripe Dashboard → Developers → API keys → Publishable key
-  
-  **Test mode**: `pk_test_...`
-  
-  **Live mode**: `pk_live_...`
-  
-  **Example**: `pk_test_51Ab3CdEfGhIjKlMnOpQrStUvWxYz...`
-  
-  <Warning>
-    Use test keys for development (`pk_test_`) and live keys for production (`pk_live_`).
-  </Warning>
-</ParamField>
 
 ### API Configuration
 
@@ -95,9 +79,6 @@ Location: `/client/.env.local`
 # Supabase
 VITE_SUPABASE_URL=https://abcdefghijklm.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG0iLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY0MDk5NTIwMCwiZXhwIjoxOTU2NTcxMjAwfQ.example
-
-# Stripe
-VITE_STRIPE_PUBLIC_KEY=pk_test_51Ab3CdEfGhIjKlMnOpQrStUvWxYz1234567890
 
 # API
 VITE_API_BASE_URL=http://localhost:3000
@@ -325,7 +306,6 @@ if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 2. Add variables:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_STRIPE_PUBLIC_KEY`
    - `VITE_API_BASE_URL`
 3. Redeploy site
 

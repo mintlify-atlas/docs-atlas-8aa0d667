@@ -24,7 +24,7 @@ For a more detailed setup, see the [full installation guide](/installation).
 Before starting, make sure you have:
 - **Node.js 18+** installed ([download](https://nodejs.org))
 - A **Supabase account** ([sign up](https://supabase.com))
-- A **Stripe account** ([sign up](https://stripe.com))
+- A **Stripe account** for backend webhooks ([sign up](https://stripe.com))
 
 ## Quick Setup
 
@@ -93,13 +93,11 @@ Before starting, make sure you have:
     ```bash
     VITE_SUPABASE_URL=https://your-project.supabase.co
     VITE_SUPABASE_ANON_KEY=your-anon-key
-    
-    VITE_STRIPE_PUBLIC_KEY=pk_test_your-stripe-key
     VITE_API_URL=http://localhost:3001
     ```
     
     <Note>
-    Use your Stripe **Publishable key** (starts with `pk_test_`) for `VITE_STRIPE_PUBLIC_KEY`.
+    Payment processing is handled through SumUp redirect. No additional payment provider credentials needed for the frontend.
     </Note>
   </Step>
 
@@ -153,13 +151,16 @@ Before starting, make sure you have:
   </Step>
 
   <Step title="Test Checkout">
-    Go to your cart and click **Proceed to Checkout**. Use Stripe's test card:
+    Go to your cart and click **Proceed to Checkout**.
     
-    - **Card number:** `4242 4242 4242 4242`
-    - **Expiry:** Any future date
-    - **CVC:** Any 3 digits
+    The system will:
+    1. Create an order in the database
+    2. Redirect you to SumUp's payment page in a new tab
+    3. Clear your cart after order creation
     
-    After payment, you'll see your order confirmation!
+    <Note>
+    Payment is processed through SumUp. In production, configure your SumUp merchant account. For development, the order is created but you'll need a test SumUp link.
+    </Note>
   </Step>
 </Steps>
 
@@ -256,7 +257,7 @@ Now that you have the platform running, here's what to explore:
   </Accordion>
   
   <Accordion title="How do I test payments without real money?">
-    Stripe test mode is enabled by default with test API keys. Use card number `4242 4242 4242 4242` for successful payments. See more [test cards](https://stripe.com/docs/testing).
+    The platform uses SumUp for payment processing. Orders are created in the database, but payment is handled externally through SumUp. You'll need to configure your SumUp merchant account and payment link for actual payments. The backend uses Stripe webhooks for order status updates.
   </Accordion>
   
   <Accordion title="How do I customize the design?">
