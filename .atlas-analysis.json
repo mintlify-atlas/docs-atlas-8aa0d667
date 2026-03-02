@@ -1,0 +1,124 @@
+{
+  "projectType": "saas",
+  "projectName": "Sabbels Handmade E-Commerce",
+  "projectDescription": "Full-stack e-commerce platform for handmade products with React, Supabase, and Stripe integration",
+  "theme": "almond",
+  "primaryColor": "#8B7355",
+  "lightColor": "#A0522D",
+  "darkColor": "#6B5444",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "user-guide/browsing-products",
+              "user-guide/shopping-cart",
+              "user-guide/checkout",
+              "user-guide/order-tracking",
+              "user-guide/user-account"
+            ]
+          },
+          {
+            "group": "Admin Guide",
+            "pages": [
+              "admin-guide/dashboard",
+              "admin-guide/managing-products",
+              "admin-guide/product-variants",
+              "admin-guide/categories-colors",
+              "admin-guide/orders",
+              "admin-guide/customers",
+              "admin-guide/customer-photos"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/authentication",
+              "features/payment-processing",
+              "features/internationalization",
+              "features/product-catalog",
+              "features/inventory-management"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Backend API",
+            "pages": [
+              "api/overview",
+              "api/checkout",
+              "api/webhooks",
+              "api/contact"
+            ]
+          },
+          {
+            "group": "Database",
+            "pages": [
+              "database/schema",
+              "database/tables",
+              "database/row-level-security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Setup & Deploy",
+        "groups": [
+          {
+            "group": "Configuration",
+            "pages": [
+              "setup/supabase",
+              "setup/stripe",
+              "setup/email",
+              "setup/environment-variables"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/frontend",
+              "deployment/backend",
+              "deployment/database-migrations"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Product catalog with categories, colors, and variants",
+    "Shopping cart with local persistence",
+    "Stripe checkout and payment processing",
+    "User authentication and role-based access control",
+    "Admin dashboard for managing products, orders, and customers",
+    "Order management with status tracking",
+    "Customer photo wall feature",
+    "Internationalization (German/French)",
+    "Row Level Security with Supabase",
+    "Responsive design for mobile and desktop"
+  ],
+  "publicApiSurface": [
+    "POST /api/checkout - Create Stripe payment intent",
+    "POST /api/stripe/webhook - Handle Stripe payment events",
+    "POST /api/contact - Submit contact form with attachments",
+    "POST /api/admin/cleanup-orders - Clean up abandoned orders",
+    "GET /api/health - Health check endpoint",
+    "Supabase tables: categories, colors, items, item_variants, item_images, orders, order_items, users, customer_photos",
+    "Frontend contexts: AuthContext, CartContext, ThemeContext",
+    "Frontend services: auth, items, orders, ratings, adminProducts, adminCategories, adminColors, adminVariants"
+  ]
+}
