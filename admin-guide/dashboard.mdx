@@ -1,0 +1,107 @@
+---
+title: Admin Dashboard
+description: Monitor your store's performance with real-time KPIs and quick access to admin features
+---
+
+The Admin Dashboard provides a comprehensive overview of your e-commerce store's performance and quick access to all management features.
+
+## Key Performance Indicators
+
+The dashboard displays four critical metrics to track your store's health:
+
+<Info>
+All KPIs show percentage changes compared to the previous period, helping you identify trends at a glance.
+</Info>
+
+### Revenue Widget
+
+Displays total revenue with delta percentage showing growth or decline.
+
+**Fields:**
+- `revenue` - Total revenue amount
+- `revenueDeltaPct` - Percentage change from previous period
+
+### Orders Widget
+
+Tracks total number of orders placed.
+
+**Fields:**
+- `orders` - Total order count
+- `ordersDeltaPct` - Percentage change in order volume
+
+### Average Order Value
+
+Shows the average transaction amount per order.
+
+**Field:** `avgOrder`
+
+### Pending Orders
+
+Highlights orders requiring attention.
+
+**Field:** `pendingOrders` - Count of orders awaiting processing
+
+<Warning>
+Pending orders require action! High pending counts may indicate fulfillment bottlenecks.
+</Warning>
+
+## Quick Access Shortcuts
+
+The dashboard provides six shortcut cards for rapid navigation:
+
+<Steps>
+  <Step title="Products">
+    Manage your product catalog with the simplified creation wizard
+    
+    **Route:** `/admin/products`
+  </Step>
+  
+  <Step title="Orders">
+    View and manage customer orders, update order status
+    
+    **Route:** `/admin/orders`
+  </Step>
+  
+  <Step title="Users">
+    Manage customer accounts and user roles
+    
+    **Route:** `/admin/users`
+  </Step>
+  
+  <Step title="Colors">
+    Manage the color palette available for products
+    
+    **Route:** `/admin/colors`
+  </Step>
+  
+  <Step title="Categories">
+    Organize products by categories and subcategories
+    
+    **Route:** `/admin/categories`
+  </Step>
+  
+  <Step title="Variants">
+    Manage product variants (sizes, colors, stock levels)
+    
+    **Route:** `/admin/variants`
+  </Step>
+</Steps>
+
+## Data Loading
+
+The dashboard uses the `useAdminStats` hook to fetch statistics from the backend.
+
+**Loading States:**
+- `loading` - Shows loading message while fetching data
+- `error` - Displays error message if data fetch fails
+
+## Implementation Details
+
+The dashboard is located at:
+- **Component:** `client/src/pages/AdminDashboard.jsx:30`
+- **Stats Hook:** `useAdminStats()` fetches all KPI data
+
+**Widget Component** (`AdminDashboard.jsx:9`):
+- Renders individual KPI cards
+- Props: `title`, `value`, `delta`, `deltaType`, `icon`
+- Delta types: `positive`, `negative`, `neutral`

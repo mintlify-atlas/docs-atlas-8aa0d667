@@ -1,0 +1,192 @@
+---
+title: 'Database Schema Overview'
+description: 'Complete overview of the Sabbels Handmade e-commerce database schema, including entity relationships and architecture'
+---
+
+## Overview
+
+The Sabbels Handmade database is built on PostgreSQL with Supabase and implements a comprehensive e-commerce platform schema. The database uses Row Level Security (RLS) for fine-grained access control and includes automated triggers for timestamp management.
+
+## Extensions
+
+The schema requires the following PostgreSQL extension:
+
+```sql
+create extension if not exists "pgcrypto"; -- For gen_random_uuid()
+```
+
+## Entity Relationship Overview
+
+The database schema is organized into several logical domains:
+
+### Product Catalog Domain
+
+- **categories** - Hierarchical product categories with self-referencing parent-child relationships
+- **items** - Core product definitions with pricing, status, and pattern types
+- **item_variants** - Size-based product variants with individual SKUs and stock levels
+- **colors** - Color definitions with hex codes for product customization
+- **item_colors** - Many-to-many relationship between items and available colors
+- **item_images** - Multiple images per product
+- **item_ratings** - Customer reviews and ratings (1-5 stars)
+
+### Order Management Domain
+
+- **orders** - Order headers with status tracking and shipping information
+- **order_items** - Individual line items within orders, linking to variants
+- **payments** - Payment transaction records (Stripe integration)
+- **stripe_events** - Idempotency tracking for Stripe webhook events
+
+### User & Content Domain
+
+- **users** - Customer and admin user accounts (extends auth.users)
+- **customer_photos** - Customer-submitted photos for gallery/social proof
+
+## Key Relationships
+
+### Product Structure
+
+```
+categories (hierarchical)
+    ↓
+items ← item_colors → colors
+    ↓
+    ├── item_variants (size/stock)
+    ├── item_images (gallery)
+    └── item_ratings (reviews)
+```
+
+### Order Flow
+
+```
+users
+  ↓
+orders ← payments
+  ↓
+order_items → item_variants → items
+```
+
+## Schema Diagram Description
+
+### Core Product Tables
+
+**items** is the central table, connected to:
+- **categories** via `category_id` (nullable, SET NULL on delete)
+- **item_colors** via many-to-many junction table
+- **item_variants** via one-to-many relationship
+- **item_images** via one-to-many relationship
+- **item_ratings** via one-to-many relationship
+
+### Order Processing Chain
+
+1. **users** place **orders**
+2. **orders** contain multiple **order_items**
+3. Each **order_item** references a specific **item_variant**
+4. **payments** track financial transactions per order
+5. **stripe_events** prevent duplicate webhook processing
+
+## Important Constraints
+
+<Note>
+  All items **must have at least one color** assigned. This is enforced via deferred constraint triggers that execute after transaction commit.
+</Note>
+
+<Warning>
+  The `item_colors` table uses `ON DELETE RESTRICT` for colors, meaning colors cannot be deleted if they're assigned to any items. Items must be updated first.
+</Warning>
+
+## Data Integrity Features
+
+### Check Constraints
+
+- **Price validation**: All prices must be >= 0
+- **Stock validation**: Stock levels must be >= 0
+- **Rating range**: Ratings must be between 1 and 5
+- **Status enums**: Strict status values for items, orders, and user roles
+- **Hex code format**: Colors must match `^#([0-9A-Fa-f]{6})$` pattern
+
+### Unique Constraints
+
+- Category names must be unique per parent
+- Color codes and hex codes are globally unique
+- Users cannot rate the same item twice
+- Item variants are unique per item+size combination
+- Payment provider+provider_id combinations are unique
+
+### Cascade Behaviors
+
+- Deleting a category cascades to child categories
+- Deleting an item cascades to variants, images, colors, and ratings
+- Deleting an order cascades to order_items and payments
+- Deleting a user cascades to their orders and ratings
+
+## Automated Triggers
+
+### Timestamp Management
+
+The `set_updated_at()` trigger function automatically updates the `updated_at` field on:
+
+- users
+- items
+- item_ratings
+- orders
+- payments
+
+```sql
+create or replace function public.set_updated_at() returns trigger
+language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+```
+
+### Color Requirement Enforcement
+
+Deferred constraint triggers ensure items always have at least one color:
+
+```sql
+create constraint trigger ctr_items_require_color
+  after insert or update on public.items
+  deferrable initially deferred
+  for each row execute function public.require_item_color_trg();
+```
+
+<Note>
+  These triggers are **deferred**, meaning they execute at transaction commit time, allowing you to insert an item and its colors in the same transaction.
+</Note>
+
+## Indexing Strategy
+
+### Foreign Key Indexes
+
+All foreign key columns are indexed for optimal join performance:
+- `idx_categories_parent`
+- `idx_items_category`
+- `idx_item_colors_color`
+- `idx_item_images_item`
+- `idx_variants_item`
+- `idx_orders_user`
+- `idx_order_items_order`, `idx_order_items_item`
+- `idx_payments_order`
+
+### Functional Indexes
+
+- **Full-text search**: `idx_items_name` uses GIN index on `to_tsvector` for fast product name searches
+- **Visible photos**: `idx_customer_photos_visible` for efficient gallery queries
+
+### Unique Indexes
+
+- `ux_categories_name_parent` - Ensures category names are unique within parent
+- `ux_item_variants_combo` - Prevents duplicate item+size combinations using `coalesce(size, '')`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tables Reference" icon="table" href="/database/tables">
+    Complete documentation of all table columns, types, and constraints
+  </Card>
+  <Card title="Row Level Security" icon="shield" href="/database/row-level-security">
+    RLS policies for access control and multi-tenant security
+  </Card>
+</CardGroup>

@@ -1,0 +1,215 @@
+---
+title: 'Deploy Frontend to Netlify'
+description: 'Deploy the React client application to Netlify with Vite build configuration'
+---
+
+The React client is built with Vite 7 and React 19, and can be deployed to Netlify with automatic builds and deployments.
+
+## Prerequisites
+
+<Info>
+  - Netlify account
+  - GitHub repository connected to Netlify
+  - Environment variables configured in Netlify dashboard
+</Info>
+
+## Deployment Steps
+
+<Steps>
+<Step title="Configure Environment Variables">
+
+Navigate to your Netlify site settings and add the following environment variables:
+
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_KEY=your-anon-key
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
+VITE_API_URL=https://your-api.com
+VITE_API_URL_PROD=https://your-api.com
+```
+
+<Warning>
+  All Vite environment variables must be prefixed with `VITE_` to be accessible in the browser.
+</Warning>
+
+</Step>
+
+<Step title="Review Build Configuration">
+
+The project includes a `netlify.toml` file that configures the build settings:
+
+```toml netlify.toml
+[build]
+  base = "client"
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[context.production.environment]
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_KEY,VITE_SUPABASE_ANON_KEY,VITE_STRIPE_PUBLISHABLE_KEY,VITE_API_URL,VITE_API_URL_LOCAL,VITE_API_URL_PROD"
+```
+
+This configuration:
+- Sets the base directory to `client/`
+- Runs `npm install && npm run build` for builds
+- Publishes the `dist/` directory
+- Allows Vite environment variables in secrets scanning
+
+</Step>
+
+<Step title="Deploy via Git Push">
+
+Netlify automatically deploys when you push to your connected branch:
+
+```bash
+git add .
+git commit -m "Update frontend"
+git push origin main
+```
+
+Netlify will:
+1. Detect the push
+2. Run the build command
+3. Deploy the `dist/` folder
+4. Provide a preview URL and production URL
+
+</Step>
+
+<Step title="Verify Deployment">
+
+Check the Netlify deploy logs for:
+
+```bash
+✓ Build succeeded
+✓ Deploying to production
+✓ Site is live
+```
+
+Visit your site URL to verify the deployment.
+
+</Step>
+</Steps>
+
+## Manual Deployment
+
+<CodeGroup>
+
+```bash Netlify CLI
+# Install Netlify CLI
+npm install -g netlify-cli
+
+# Login to Netlify
+netlify login
+
+# Deploy from client directory
+cd client
+npm install
+npm run build
+netlify deploy --prod
+```
+
+```bash Build Only
+# Build locally for testing
+cd client
+npm install
+npm run build
+
+# Preview the build
+npm run preview
+```
+
+</CodeGroup>
+
+## Build Scripts
+
+The `client/package.json` includes these build-related scripts:
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  }
+}
+```
+
+| Script | Purpose |
+|--------|--------|
+| `dev` | Run development server on port 5173 |
+| `build` | Create production build in `dist/` |
+| `preview` | Preview production build locally |
+| `lint` | Run ESLint for code quality |
+
+## Vite Configuration
+
+The Vite configuration at `client/vite.config.js` includes:
+
+```javascript vite.config.js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { fileURLToPath, URL } from 'node:url';
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+});
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with environment variable errors">
+    
+    **Solution**: Ensure all `VITE_*` variables are set in Netlify's environment variables section, not in a `.env` file.
+    
+    Navigate to: **Site settings → Environment variables → Add a variable**
+    
+  </Accordion>
+
+  <Accordion title="Blank page after deployment">
+    
+    **Possible causes**:
+    1. Check browser console for API connection errors
+    2. Verify `VITE_API_URL` points to the correct backend
+    3. Ensure Supabase credentials are correct
+    
+    **Debug**: Check Netlify function logs and browser DevTools console.
+    
+  </Accordion>
+
+  <Accordion title="Assets not loading (404 errors)">
+    
+    **Solution**: Verify the `publish` directory in `netlify.toml` is set to `dist` (not `build` or `public`).
+    
+    The Vite default output directory is `dist/`.
+    
+  </Accordion>
+</AccordionGroup>
+
+## Production Checklist
+
+- [ ] All environment variables configured in Netlify
+- [ ] API URL points to production backend
+- [ ] Stripe publishable key is for live mode
+- [ ] Supabase project is in production mode
+- [ ] Custom domain configured (optional)
+- [ ] HTTPS enabled (automatic on Netlify)
+- [ ] Build logs show no errors
+- [ ] Test user flows: catalog, cart, checkout
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy Backend" icon="server" href="/deployment/backend">
+    Set up the Express API server for production
+  </Card>
+  <Card title="Database Migrations" icon="database" href="/deployment/database-migrations">
+    Run database migrations on Supabase
+  </Card>
+</CardGroup>

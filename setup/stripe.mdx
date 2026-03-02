@@ -1,0 +1,336 @@
+---
+title: Stripe Setup
+description: Configure Stripe for payment processing and webhook handling
+---
+
+This guide covers setting up your Stripe account, configuring payment processing, and implementing webhooks for order status updates.
+
+## Prerequisites
+
+- A [Stripe account](https://stripe.com)
+- Access to your API server configuration
+- HTTPS endpoint for webhooks (required for production)
+
+## Create Stripe Account
+
+<Steps>
+  <Step title="Sign Up for Stripe">
+    1. Go to [stripe.com](https://stripe.com)
+    2. Click **Start now** or **Sign in**
+    3. Complete account registration
+    4. Verify your email address
+  </Step>
+
+  <Step title="Complete Business Profile (Production)">
+    For live payments, complete your business profile:
+    1. Go to **Settings** > **Business settings**
+    2. Fill in:
+       - Business name and details
+       - Bank account information
+       - Tax information
+    3. Submit for review
+    
+    <Note>
+      You can use test mode immediately without completing this step.
+    </Note>
+  </Step>
+</Steps>
+
+## Get API Keys
+
+Retrieve your API keys for both test and production environments.
+
+<Steps>
+  <Step title="Access API Keys">
+    1. Go to [Stripe Dashboard](https://dashboard.stripe.com)
+    2. Click **Developers** > **API keys**
+  </Step>
+
+  <Step title="Copy Test Keys">
+    For development:
+    1. Toggle to **Test mode** (top right)
+    2. Copy the **Secret key** (starts with `sk_test_`)
+    3. Copy the **Publishable key** (starts with `pk_test_`)
+    
+    <Note>
+      Test mode uses test card numbers and doesn't process real payments.
+    </Note>
+  </Step>
+
+  <Step title="Copy Production Keys (When Ready)">
+    For live payments:
+    1. Toggle to **Live mode**
+    2. Click **Reveal live key**
+    3. Copy the **Secret key** (starts with `sk_live_`)
+    4. Copy the **Publishable key** (starts with `pk_live_`)
+    
+    <Warning>
+      Keep your secret keys confidential! Never commit them to version control or expose them in client-side code.
+    </Warning>
+  </Step>
+</Steps>
+
+## Configure Webhook
+
+Webhooks notify your server when payment status changes.
+
+<Steps>
+  <Step title="Create Webhook Endpoint">
+    1. In Stripe Dashboard, go to **Developers** > **Webhooks**
+    2. Click **Add endpoint**
+    3. Enter your endpoint URL:
+       - **Development**: Use [Stripe CLI](#local-webhook-testing) for testing
+       - **Production**: `https://your-api-domain.com/api/stripe/webhook`
+  </Step>
+
+  <Step title="Select Events to Listen">
+    Add these events:
+    - `payment_intent.succeeded` - Payment completed successfully
+    - `payment_intent.payment_failed` - Payment failed
+    - `payment_intent.canceled` - Payment canceled
+    
+    Click **Add events** to confirm.
+  </Step>
+
+  <Step title="Get Webhook Secret">
+    1. After creating the endpoint, click on it
+    2. Click **Reveal** under **Signing secret**
+    3. Copy the webhook secret (starts with `whsec_`)
+    
+    <Note>
+      This secret is used to verify webhook signatures and prevent replay attacks.
+    </Note>
+  </Step>
+</Steps>
+
+## Test Cards
+
+Use these test card numbers in test mode:
+
+| Card Number | Scenario | CVC | Date |
+|------------|----------|-----|------|
+| `4242 4242 4242 4242` | Successful payment | Any 3 digits | Any future date |
+| `4000 0000 0000 9995` | Payment declined | Any 3 digits | Any future date |
+| `4000 0025 0000 3155` | Requires authentication (3D Secure) | Any 3 digits | Any future date |
+| `4000 0000 0000 0002` | Card declined | Any 3 digits | Any future date |
+
+<Note>
+  Complete test card list: [Stripe Testing Cards](https://stripe.com/docs/testing)
+</Note>
+
+## Local Webhook Testing
+
+Test webhooks locally using the Stripe CLI.
+
+<Steps>
+  <Step title="Install Stripe CLI">
+    **macOS (Homebrew)**:
+    ```bash
+    brew install stripe/stripe-cli/stripe
+    ```
+    
+    **Windows (Scoop)**:
+    ```bash
+    scoop bucket add stripe https://github.com/stripe/scoop-stripe-cli.git
+    scoop install stripe
+    ```
+    
+    **Linux**:
+    ```bash
+    wget https://github.com/stripe/stripe-cli/releases/latest/download/stripe_linux_amd64.tar.gz
+    tar -xvf stripe_linux_amd64.tar.gz
+    sudo mv stripe /usr/local/bin
+    ```
+  </Step>
+
+  <Step title="Login to Stripe CLI">
+    ```bash
+    stripe login
+    ```
+    
+    This opens your browser to authorize the CLI.
+  </Step>
+
+  <Step title="Forward Webhooks to Local Server">
+    ```bash
+    stripe listen --forward-to localhost:3000/api/stripe/webhook
+    ```
+    
+    The CLI will output a webhook signing secret starting with `whsec_`. Use this as your `STRIPE_WEBHOOK_SECRET` during development.
+  </Step>
+
+  <Step title="Trigger Test Events">
+    In another terminal, trigger test events:
+    ```bash
+    stripe trigger payment_intent.succeeded
+    stripe trigger payment_intent.payment_failed
+    ```
+  </Step>
+</Steps>
+
+## Webhook Implementation
+
+The API server handles three webhook events:
+
+### Payment Succeeded
+
+When `payment_intent.succeeded` is received:
+1. Order status updated to `paid`
+2. Order confirmation email sent to shop owner
+3. Customer receives payment confirmation
+
+**Code reference**: `/api/src/server.js:52-78`
+
+```javascript
+case 'payment_intent.succeeded': {
+  const pi = event.data.object
+  const orderId = pi.metadata?.order_id
+  
+  // Update order status to 'paid'
+  await supabase
+    .from('orders')
+    .update({ status: 'paid' })
+    .eq('id', orderId)
+  
+  // Send order recap email
+  await sendOrderRecapEmail(orderId)
+  break
+}
+```
+
+### Payment Failed
+
+When `payment_intent.payment_failed` is received:
+1. Order status updated to `failed`
+2. User can retry payment or create new order
+
+**Code reference**: `/api/src/server.js:80-89`
+
+### Payment Canceled
+
+When `payment_intent.canceled` is received:
+1. Order status updated to `canceled`
+2. No further action required
+
+**Code reference**: `/api/src/server.js:90-99`
+
+## Verify Webhook Signatures
+
+The API automatically verifies webhook signatures to prevent tampering:
+
+**Code reference**: `/api/src/server.js:38-46`
+
+```javascript
+const sig = req.headers['stripe-signature']
+let event
+
+try {
+  event = stripe.webhooks.constructEvent(
+    req.body, 
+    sig, 
+    STRIPE_WEBHOOK_SECRET
+  )
+} catch (err) {
+  return res.status(400).json({ 
+    error: `Webhook Error: ${err.message}` 
+  })
+}
+```
+
+<Warning>
+  Always verify webhook signatures in production! This prevents malicious actors from sending fake webhook events.
+</Warning>
+
+## Payment Flow
+
+Here's how the complete payment flow works:
+
+<Steps>
+  <Step title="Customer Initiates Checkout">
+    1. User adds items to cart
+    2. Clicks "Checkout"
+    3. Frontend calls `/api/checkout` endpoint
+  </Step>
+
+  <Step title="Server Creates Payment Intent">
+    1. API validates cart items and stock
+    2. Creates order in database with `pending` status
+    3. Creates Stripe Payment Intent
+    4. Returns `clientSecret` to frontend
+    
+    **Code reference**: `/api/src/server.js:207-281`
+  </Step>
+
+  <Step title="Customer Completes Payment">
+    1. Frontend displays Stripe payment form
+    2. Customer enters card details
+    3. Stripe processes payment
+    4. Payment Intent status changes
+  </Step>
+
+  <Step title="Webhook Updates Order">
+    1. Stripe sends webhook to your server
+    2. Server verifies signature
+    3. Updates order status based on payment result
+    4. Sends confirmation email if successful
+  </Step>
+</Steps>
+
+## Production Checklist
+
+Before going live:
+
+- [ ] Complete Stripe business profile verification
+- [ ] Switch to live API keys
+- [ ] Update webhook endpoint to production URL
+- [ ] Test webhook with live endpoint
+- [ ] Configure proper error handling
+- [ ] Set up Stripe email receipts
+- [ ] Enable Stripe Radar for fraud detection
+- [ ] Review and configure payment methods (cards, Apple Pay, Google Pay)
+
+## Next Steps
+
+- [Configure email notifications](/setup/email)
+- [Set up environment variables](/setup/environment-variables)
+- [Deploy your application](/deploy/api)
+
+## Troubleshooting
+
+### Webhook Not Receiving Events
+
+1. Verify endpoint URL is correct and accessible
+2. Check webhook events are selected in Stripe Dashboard
+3. Ensure endpoint returns `200 OK` status
+4. Check server logs for errors
+
+### Payment Intent Creation Fails
+
+```javascript
+error: "Invalid integer: NaN"
+```
+
+This means the amount calculation failed. Check:
+1. All products have valid prices in database
+2. Cart items include `variant_id`
+3. Variants exist with non-null prices
+
+### Signature Verification Failed
+
+```
+Webhook signature verification failed
+```
+
+Causes:
+1. Wrong `STRIPE_WEBHOOK_SECRET`
+2. Request body modified before verification
+3. Using wrong secret (test vs. production)
+
+Solution: Ensure you're using `express.raw()` middleware for the webhook route:
+
+```javascript
+app.post('/api/stripe/webhook', 
+  express.raw({ type: 'application/json' }), 
+  webhookHandler
+)
+```

@@ -1,0 +1,317 @@
+---
+title: 'Order Tracking'
+description: 'View your order history and track the status of your purchases'
+---
+
+# Order Tracking
+
+Track your orders and view your complete purchase history through the "My Orders" page.
+
+## Accessing Your Orders
+
+There are multiple ways to view your orders:
+
+### From Navigation
+- Click your profile icon or name in the navigation bar
+- Select **"My Orders"** from the dropdown menu
+
+### From Profile Page
+- Navigate to your profile page
+- Click the **"Orders"** quick action
+- Or click **"View Orders"** in the order history card
+
+### Direct URL
+- Navigate directly to `/orders`
+
+<Note>
+  You must be logged in to view your orders. If you're not logged in, you'll see a login prompt.
+</Note>
+
+## Order History Page
+
+The order history page displays all your past and current orders.
+
+### Page Layout
+
+**Header Section**
+- Page title: "My Orders"
+- Total number of orders (if applicable)
+
+**Orders Grid**
+- Cards for each order
+- Ordered from newest to oldest
+- Responsive grid layout (adapts to screen size)
+
+## Order Card Information
+
+Each order card displays comprehensive information:
+
+### Header Section
+
+| Field | Description |
+|-------|-------------|
+| **Order Number** | Shortened order ID (first 8 characters) |
+| **Order Date** | Date the order was created |
+| **Status Badge** | Current order status with color coding |
+| **Total Amount** | Total order value in euros |
+
+### Item List
+
+Below the header, you'll see all items in the order:
+
+**For Each Item:**
+- Product thumbnail image
+- Product name
+- Quantity ordered
+- Line item total (price × quantity)
+
+<Info>
+  Item details are pulled from the product database, so you'll see current product information even for old orders.
+</Info>
+
+## Order Statuses
+
+Orders can have different statuses, each with its own color coding:
+
+### Status Types
+
+<Steps>
+  <Step title="Pending">
+    **Color**: Accent/Orange
+    
+    Order has been created but payment is not yet confirmed. This is the initial state after clicking "Pay with SumUp".
+  </Step>
+  <Step title="Processing">
+    **Color**: Blue
+    
+    Payment confirmed and order is being prepared. The artisan is working on your handmade items.
+  </Step>
+  <Step title="Shipped">
+    **Color**: Purple
+    
+    Order has been shipped and is on its way to you. You may receive tracking information separately.
+  </Step>
+  <Step title="Delivered">
+    **Color**: Green
+    
+    Order has been successfully delivered to your address.
+  </Step>
+  <Step title="Cancelled">
+    **Color**: Red
+    
+    Order was cancelled (either by you or the shop). Payment would be refunded if already processed.
+  </Step>
+</Steps>
+
+<Note>
+  Status colors help you quickly identify the state of each order at a glance.
+</Note>
+
+## Order Details
+
+### Order Number Format
+
+Order numbers are displayed as:
+- **Format**: `#ABC12345` (first 8 characters of the full order ID)
+- **Full ID**: The complete order ID is stored in the database
+- **Reference**: Use this number when contacting support
+
+### Date Formatting
+
+Order dates are displayed in localized format:
+- **French locale** (fr-FR): "1 janvier 2026"
+- **German locale** (de-DE): "1. Januar 2026"
+- Automatically matches your language preference
+
+### Total Calculation
+
+The order total is calculated by:
+1. Summing all items: (item price × quantity) for each item
+2. Using the stored `total` field if available
+3. Displayed with 2 decimal places (e.g., "45.50 €")
+
+## Empty Order History
+
+If you haven't placed any orders yet:
+
+**You'll See:**
+- Empty state message
+- "No orders yet" text
+- **"Browse Products"** button to start shopping
+
+<Tip>
+  New customers will see the empty state until they complete their first purchase.
+</Tip>
+
+## Loading States
+
+### Initial Load
+
+When the page first loads:
+- Loading spinner appears
+- Message: "Loading your orders..."
+- Prevents interaction until data is fetched
+
+### Error State
+
+If orders fail to load:
+- Error message displays
+- "Failed to load orders" notification
+- Option to retry (refresh the page)
+
+## Order Item Details
+
+### Item Information Display
+
+For each item in an order:
+
+**Image**
+- Thumbnail of the product
+- Uses first product image from the database
+- Fallback if image is unavailable
+
+**Name**
+- Current product name
+- Links to product database
+- Shows "—" if product name unavailable
+
+**Quantity**
+- Number of units ordered
+- Format: "Quantity: 2" or localized equivalent
+
+**Price**
+- Line item total (quantity × unit price)
+- Format: "45.50 €"
+
+## Authentication Requirements
+
+### Logged Out Experience
+
+If you access `/orders` while logged out:
+
+1. You'll see a message prompting you to log in
+2. A **"Log In"** button redirects to the login page
+3. After logging in, you'll be redirected back to your orders
+
+### Session Verification
+
+The page verifies:
+- Valid user session exists
+- User ID is available
+- Orders are fetched for the authenticated user only
+
+<Info>
+  For privacy and security, you can only view your own orders. Each user sees only their purchase history.
+</Info>
+
+## Localization
+
+The order tracking page supports multiple languages:
+
+### Translated Elements
+- Page title and headings
+- Status labels
+- Date formats
+- Button text
+- Empty state messages
+- Error messages
+
+### Language Selection
+
+Language is determined by:
+- User's language preference setting
+- Browser language settings
+- Defaults to French (fr) or German (de)
+
+## Mobile Experience
+
+On mobile devices:
+
+**Layout Optimizations:**
+- Orders display in a single column
+- Card elements stack vertically
+- Item thumbnails are appropriately sized
+- Status badges remain clearly visible
+- All information is easily readable
+
+**Touch Interactions:**
+- Large tap targets for buttons
+- Smooth scrolling through order history
+- Responsive grid adapts to screen width
+
+## Data Fetching
+
+### Order Data Source
+
+Orders are fetched from the backend API:
+- **Service**: `fetchUserOrders(userId)`
+- **Filter**: Only orders for the logged-in user
+- **Relations**: Includes related order items and product data
+- **Sorting**: Orders are sorted by creation date (newest first)
+
+### Real-Time Updates
+
+Order data:
+- Is fetched fresh each time you visit the page
+- Reflects the current status from the database
+- Includes latest product information
+- Updates when you refresh the page
+
+## Common Use Cases
+
+### Checking Order Status
+
+<Steps>
+  <Step title="Navigate to orders page">
+    Access "My Orders" from profile or navigation
+  </Step>
+  <Step title="Find your order">
+    Locate the order by date or order number
+  </Step>
+  <Step title="Check status badge">
+    The colored badge shows current status (pending, processing, shipped, etc.)
+  </Step>
+</Steps>
+
+### Verifying Purchase Details
+
+1. Find the relevant order in your history
+2. Review the items list to see what was ordered
+3. Check quantities and total amount
+4. Note the order number for support inquiries
+
+### Getting Support
+
+When contacting support about an order:
+- Reference the order number (e.g., "#ABC12345")
+- Note the order date
+- Describe which items your question relates to
+- Mention the current status
+
+<Tip>
+  Screenshot your order card to have all relevant information when contacting support.
+</Tip>
+
+## Technical Details
+
+### Order Structure
+
+Each order in the database contains:
+- Unique order ID (UUID)
+- User ID (who placed the order)
+- Creation timestamp
+- Status field
+- Total amount
+- Related order_items (array)
+
+### Item Relations
+
+Order items link to:
+- Base product (items table)
+- Product images
+- Variant information
+- Current pricing
+
+<Note>
+  Historical orders show current product information. If a product name or image changes, you'll see the updated version in your order history.
+</Note>

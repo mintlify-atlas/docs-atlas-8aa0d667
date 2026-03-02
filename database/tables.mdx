@@ -1,0 +1,449 @@
+---
+title: 'Database Tables'
+description: 'Complete reference for all database tables, columns, data types, and constraints'
+---
+
+## categories
+
+Hierarchical product category structure supporting parent-child relationships.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing category identifier |
+| `name` | `text` | NOT NULL | Category display name |
+| `parent_id` | `bigint` | FOREIGN KEY → categories(id) | Reference to parent category (NULL for root categories) |
+| `created_at` | `timestamp` | DEFAULT now() | Category creation timestamp |
+
+### Constraints
+
+- **Unique**: `(name, parent_id)` - Category names must be unique within the same parent
+- **Foreign Key**: `parent_id` references `categories(id)` with `ON DELETE CASCADE`
+
+### Indexes
+
+```sql
+create unique index ux_categories_name_parent on categories (name, parent_id);
+create index idx_categories_parent on categories(parent_id);
+```
+
+### Example
+
+```sql
+-- Create root category
+INSERT INTO categories (name, parent_id) VALUES ('Clothing', NULL);
+
+-- Create subcategory
+INSERT INTO categories (name, parent_id) 
+VALUES ('Sweaters', (SELECT id FROM categories WHERE name = 'Clothing'));
+```
+
+---
+
+## colors
+
+Color definitions for product customization with hex codes.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing color identifier |
+| `name` | `text` | NOT NULL | Human-readable color name |
+| `code` | `text` | NOT NULL, UNIQUE | Internal color code (e.g., "blue_navy") |
+| `hex_code` | `text` | NOT NULL, UNIQUE | Hex color value (e.g., "#1A2B3C") |
+| `created_at` | `timestamp` | DEFAULT now() | Color creation timestamp |
+
+### Constraints
+
+- **Check**: `hex_code` must match pattern `^#([0-9A-Fa-f]{6})$`
+- **Unique**: Both `code` and `hex_code` must be globally unique
+
+<Warning>
+  Colors cannot be deleted if they're assigned to any items due to `ON DELETE RESTRICT` in the `item_colors` table.
+</Warning>
+
+### Example
+
+```sql
+INSERT INTO colors (name, code, hex_code)
+VALUES ('Navy Blue', 'blue_navy', '#001f3f');
+```
+
+---
+
+## users
+
+User accounts extending Supabase auth.users with role-based access.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | PRIMARY KEY, FOREIGN KEY → auth.users(id) | User identifier (from Supabase Auth) |
+| `email` | `text` | NOT NULL, UNIQUE | User email address |
+| `role` | `text` | NOT NULL, DEFAULT 'client' | User role: 'client' or 'admin' |
+| `created_at` | `timestamp` | DEFAULT now() | Account creation timestamp |
+| `updated_at` | `timestamp` | DEFAULT now() | Last update timestamp (auto-managed) |
+
+### Constraints
+
+- **Check**: `role IN ('client', 'admin')`
+- **Foreign Key**: `id` references `auth.users(id)` with `ON DELETE CASCADE`
+
+### Triggers
+
+- `trg_users_updated_at` - Automatically updates `updated_at` on row modification
+
+---
+
+## items
+
+Core product catalog with pricing, status, and categorization.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing item identifier |
+| `name` | `text` | NOT NULL | Product name |
+| `description` | `text` | NULL | Product description (markdown supported) |
+| `price` | `numeric(10,2)` | NOT NULL, CHECK >= 0 | Base price in EUR |
+| `image_url` | `text` | NULL | Primary product image URL |
+| `category_id` | `bigint` | FOREIGN KEY → categories(id) | Product category |
+| `status` | `text` | NOT NULL, DEFAULT 'draft' | Product status |
+| `pattern_type` | `text` | NULL | Knitting pattern type (optional) |
+| `created_at` | `timestamp` | DEFAULT now() | Creation timestamp |
+| `updated_at` | `timestamp` | DEFAULT now() | Last update timestamp (auto-managed) |
+
+### Constraints
+
+- **Check**: `status IN ('draft', 'active', 'archived')`
+- **Check**: `pattern_type IS NULL OR pattern_type IN ('rechtsmuster', 'gaensefuesschen')`
+- **Foreign Key**: `category_id` references `categories(id)` with `ON DELETE SET NULL`
+
+<Note>
+  Every item **must have at least one color** assigned via the `item_colors` table. This is enforced by a deferred constraint trigger.
+</Note>
+
+### Indexes
+
+```sql
+create index idx_items_category on items(category_id);
+create index idx_items_name on items using gin (to_tsvector('simple', coalesce(name,'')));
+```
+
+### Triggers
+
+- `trg_items_updated_at` - Automatically updates `updated_at`
+- `ctr_items_require_color` - Ensures at least one color is assigned (deferred)
+
+---
+
+## item_colors
+
+Many-to-many junction table linking items to available colors.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `item_id` | `bigint` | PRIMARY KEY, FOREIGN KEY → items(id) | Item identifier |
+| `color_id` | `bigint` | PRIMARY KEY, FOREIGN KEY → colors(id) | Color identifier |
+
+### Constraints
+
+- **Primary Key**: Composite `(item_id, color_id)`
+- **Foreign Key**: `item_id` references `items(id)` with `ON DELETE CASCADE`
+- **Foreign Key**: `color_id` references `colors(id)` with `ON DELETE RESTRICT`
+
+### Indexes
+
+```sql
+create index idx_item_colors_color on item_colors(color_id);
+```
+
+### Triggers
+
+- `ctr_item_colors_require_color` - Prevents removing the last color from an item
+
+### Example
+
+```sql
+-- Assign multiple colors to an item
+INSERT INTO item_colors (item_id, color_id)
+VALUES 
+  (1, 5),  -- Navy Blue
+  (1, 7),  -- Charcoal Grey
+  (1, 12); -- Burgundy
+```
+
+---
+
+## item_images
+
+Additional product images for galleries.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing image identifier |
+| `item_id` | `bigint` | NOT NULL, FOREIGN KEY → items(id) | Associated item |
+| `image_url` | `text` | NOT NULL | Image storage URL |
+| `created_at` | `timestamp` | DEFAULT now() | Upload timestamp |
+
+### Constraints
+
+- **Foreign Key**: `item_id` references `items(id)` with `ON DELETE CASCADE`
+
+### Indexes
+
+```sql
+create index idx_item_images_item on item_images(item_id);
+```
+
+---
+
+## item_variants
+
+Size-based product variants with individual SKUs, pricing, and stock tracking.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing variant identifier |
+| `item_id` | `bigint` | NOT NULL, FOREIGN KEY → items(id) | Parent item |
+| `sku` | `text` | UNIQUE | Stock Keeping Unit (optional) |
+| `size` | `text` | NULL | Size designation (e.g., "S", "M", "L") |
+| `stock` | `integer` | NOT NULL, DEFAULT 0, CHECK >= 0 | Available inventory count |
+| `price` | `numeric(10,2)` | NOT NULL, CHECK >= 0 | Variant-specific price |
+| `created_at` | `timestamp` | DEFAULT now() | Creation timestamp |
+
+### Constraints
+
+- **Unique**: `(item_id, coalesce(size, ''))` - Prevents duplicate size variants per item
+- **Foreign Key**: `item_id` references `items(id)` with `ON DELETE CASCADE`
+
+### Indexes
+
+```sql
+create index idx_variants_item on item_variants(item_id);
+create unique index ux_item_variants_combo on item_variants (item_id, coalesce(size,''));
+create index idx_item_variants_item_size on item_variants (item_id, size);
+```
+
+### Example
+
+```sql
+INSERT INTO item_variants (item_id, sku, size, stock, price)
+VALUES 
+  (1, 'SWE-NAV-S', 'S', 10, 89.99),
+  (1, 'SWE-NAV-M', 'M', 15, 89.99),
+  (1, 'SWE-NAV-L', 'L', 8, 94.99);
+```
+
+---
+
+## item_ratings
+
+Customer product reviews and ratings.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing rating identifier |
+| `item_id` | `bigint` | NOT NULL, FOREIGN KEY → items(id) | Rated item |
+| `user_id` | `uuid` | NOT NULL, FOREIGN KEY → users(id) | Reviewer |
+| `rating` | `integer` | NOT NULL, CHECK 1-5 | Star rating (1-5) |
+| `comment` | `text` | NULL | Review text (optional) |
+| `created_at` | `timestamp` | DEFAULT now() | Review submission timestamp |
+| `updated_at` | `timestamp` | DEFAULT now() | Last update timestamp (auto-managed) |
+
+### Constraints
+
+- **Check**: `rating BETWEEN 1 AND 5`
+- **Unique**: `(item_id, user_id)` - One review per user per item
+- **Foreign Key**: `item_id` references `items(id)` with `ON DELETE CASCADE`
+- **Foreign Key**: `user_id` references `users(id)` with `ON DELETE CASCADE`
+
+### Indexes
+
+```sql
+create index idx_ratings_item on item_ratings(item_id);
+```
+
+### Triggers
+
+- `trg_ratings_updated_at` - Automatically updates `updated_at`
+
+---
+
+## orders
+
+Order headers with status tracking, shipping, and payment integration.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | PRIMARY KEY, DEFAULT gen_random_uuid() | Order identifier |
+| `user_id` | `uuid` | NOT NULL, FOREIGN KEY → users(id) | Customer who placed the order |
+| `status` | `text` | NOT NULL, DEFAULT 'pending' | Order status |
+| `currency` | `text` | NOT NULL, DEFAULT 'eur' | Currency code |
+| `total` | `numeric(10,2)` | NOT NULL, DEFAULT 0, CHECK >= 0 | Order total amount |
+| `shipping_address` | `jsonb` | NULL | Shipping address (JSON structure) |
+| `payment_intent_id` | `text` | UNIQUE | Stripe PaymentIntent ID |
+| `created_at` | `timestamp` | DEFAULT now() | Order creation timestamp |
+| `updated_at` | `timestamp` | DEFAULT now() | Last update timestamp (auto-managed) |
+
+### Constraints
+
+- **Check**: `status IN ('pending', 'paid', 'failed', 'canceled', 'shipped', 'refunded')`
+- **Foreign Key**: `user_id` references `users(id)` with `ON DELETE CASCADE`
+
+### Indexes
+
+```sql
+create index idx_orders_user on orders(user_id);
+```
+
+### Triggers
+
+- `trg_orders_updated_at` - Automatically updates `updated_at`
+
+### Shipping Address Format
+
+```json
+{
+  "name": "Jane Doe",
+  "line1": "123 Main Street",
+  "line2": "Apt 4B",
+  "city": "Paris",
+  "postal_code": "75001",
+  "country": "FR"
+}
+```
+
+---
+
+## order_items
+
+Individual line items within orders.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing line item identifier |
+| `order_id` | `uuid` | NOT NULL, FOREIGN KEY → orders(id) | Parent order |
+| `item_id` | `bigint` | NOT NULL, FOREIGN KEY → items(id) | Ordered item |
+| `variant_id` | `bigint` | NOT NULL, FOREIGN KEY → item_variants(id) | Specific variant (size) |
+| `quantity` | `integer` | NOT NULL, CHECK > 0 | Quantity ordered |
+| `unit_price` | `numeric(10,2)` | NOT NULL, DEFAULT 0, CHECK >= 0 | Price per unit at time of order |
+| `total_price` | `numeric(10,2)` | GENERATED ALWAYS AS STORED | Computed: quantity × unit_price |
+| `customization` | `jsonb` | DEFAULT '{}'::jsonb | Custom options (e.g., embroidery) |
+| `created_at` | `timestamp` | DEFAULT now() | Line item creation timestamp |
+
+### Constraints
+
+- **Foreign Key**: `order_id` references `orders(id)` with `ON DELETE CASCADE`
+- **Foreign Key**: `item_id` references `items(id)` with `ON DELETE RESTRICT`
+- **Foreign Key**: `variant_id` references `item_variants(id)` with `ON DELETE RESTRICT`
+
+<Note>
+  `total_price` is a **generated column** automatically calculated as `quantity * unit_price`. You cannot insert or update this value directly.
+</Note>
+
+### Indexes
+
+```sql
+create index idx_order_items_order on order_items(order_id);
+create index idx_order_items_item on order_items(item_id);
+```
+
+### Customization Format
+
+```json
+{
+  "color": "Navy Blue",
+  "embroidery": {
+    "text": "JD",
+    "position": "left chest"
+  }
+}
+```
+
+---
+
+## payments
+
+Payment transaction records with Stripe integration.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `uuid` | PRIMARY KEY, DEFAULT gen_random_uuid() | Payment identifier |
+| `order_id` | `uuid` | NOT NULL, FOREIGN KEY → orders(id) | Associated order |
+| `provider` | `text` | NOT NULL, DEFAULT 'stripe' | Payment provider name |
+| `provider_id` | `text` | NOT NULL | External payment ID (e.g., PaymentIntent) |
+| `amount` | `numeric(10,2)` | NOT NULL, CHECK >= 0 | Payment amount |
+| `currency` | `text` | NOT NULL, DEFAULT 'eur' | Currency code |
+| `status` | `text` | NOT NULL | Payment status from provider |
+| `raw` | `jsonb` | DEFAULT '{}'::jsonb | Complete provider response |
+| `created_at` | `timestamp` | DEFAULT now() | Payment creation timestamp |
+| `updated_at` | `timestamp` | DEFAULT now() | Last update timestamp (auto-managed) |
+
+### Constraints
+
+- **Unique**: `(provider, provider_id)` - Prevents duplicate payment records
+- **Foreign Key**: `order_id` references `orders(id)` with `ON DELETE CASCADE`
+
+### Indexes
+
+```sql
+create index idx_payments_order on payments(order_id);
+```
+
+### Triggers
+
+- `trg_payments_updated_at` - Automatically updates `updated_at`
+
+---
+
+## stripe_events
+
+Idempotency tracking for Stripe webhook events.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `event_id` | `text` | PRIMARY KEY | Stripe event ID (e.g., "evt_1234...") |
+| `received_at` | `timestamp` | DEFAULT now() | Event processing timestamp |
+
+### Usage
+
+Insert event IDs when processing webhooks to prevent duplicate processing:
+
+```sql
+-- Check if event already processed
+INSERT INTO stripe_events (event_id) 
+VALUES ('evt_1234567890')
+ON CONFLICT (event_id) DO NOTHING
+RETURNING event_id;
+
+-- If no rows returned, event was already processed
+```
+
+---
+
+## customer_photos
+
+Customer-submitted photos for gallery display and social proof.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `bigserial` | PRIMARY KEY | Auto-incrementing photo identifier |
+| `image_url` | `text` | NOT NULL | Photo storage URL |
+| `position` | `integer` | NOT NULL, DEFAULT 0 | Display order (ascending) |
+| `is_visible` | `boolean` | NOT NULL, DEFAULT true | Visibility toggle |
+| `created_at` | `timestamp` | DEFAULT now() | Upload timestamp |
+
+### Indexes
+
+```sql
+create index idx_customer_photos_visible 
+  on customer_photos(is_visible, position asc)
+  where is_visible = true;
+```
+
+### Example Query
+
+```sql
+-- Get visible photos in display order
+SELECT image_url, position
+FROM customer_photos
+WHERE is_visible = true
+ORDER BY position ASC;
+```

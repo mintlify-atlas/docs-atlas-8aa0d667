@@ -1,0 +1,401 @@
+---
+title: "Inventory Management"
+description: "Stock tracking and variant availability management"
+---
+
+## Overview
+
+Inventory in Sabbels Handmade is managed at the **variant level**, not at the product level. Each variant (size/color combination) has its own stock count, allowing precise tracking of what's actually available for sale. The system enforces stock validation during checkout and provides real-time availability information.
+
+## Stock Data Model
+
+Stock is stored as an integer on each variant:
+
+```sql BDD_struct.sql:64
+create table public.item_variants (
+  id         bigserial primary key,
+  item_id    bigint not null references public.items(id) on delete cascade,
+  sku        text unique,
+  size       text,
+  stock      integer not null default 0 check (stock >= 0),
+  price      numeric(10,2) not null check (price >= 0),
+  created_at timestamp without time zone default now()
+);
+```
+
+<Info>
+  Stock levels are **not automatically decremented** when orders are placed. Stock management is currently a manual admin process. Consider implementing automatic stock deduction in the checkout flow.
+</Info>
+
+### Stock Validation Constraint
+
+The database enforces that stock cannot be negative:
+
+```sql
+check (stock >= 0)
+```
+
+## Stock Validation During Checkout
+
+The checkout endpoint validates stock availability before creating orders:
+
+<CodeGroup>
+
+```javascript server.js:220
+app.post('/api/checkout', async (req, res) => {
+  // ... authentication and cart validation
+
+  // Fetch variant data including stock levels
+  const { totalCents: amount, variantsById } = await gatherCartPricing(cartItems);
+
+  // Validate stock for each cart item
+  for (const item of cartItems) {
+    const variant = variantsById.get(item.variant_id);
+    
+    if (!variant) {
+      return res.status(400).json({ 
+        error: `Variant ${item.variant_id} introuvable` 
+      });
+    }
+    
+    // Check if item belongs to correct product
+    if (variant.item_id !== item.item_id) {
+      return res.status(400).json({ 
+        error: 'Variant et produit incompatibles' 
+      });
+    }
+    
+    // Validate sufficient stock
+    if (variant.stock != null && variant.stock < item.quantity) {
+      return res.status(400).json({ 
+        error: 'Stock insuffisant pour un des variants' 
+      });
+    }
+  }
+
+  // Proceed with order creation...
+});
+```
+
+</CodeGroup>
+
+### Stock Data Fetching
+
+The `gatherCartPricing` function retrieves stock information:
+
+```javascript server.js:182
+const { data: variants } = await supabase
+  .from('item_variants')
+  .select('id, item_id, price, stock')
+  .in('id', variantIds);
+
+const variantMap = new Map(
+  variants.map(v => [v.id, { 
+    item_id: v.item_id, 
+    price: Number(v.price), 
+    stock: v.stock ?? 0  // Treat null as 0 stock
+  }])
+);
+```
+
+## Displaying Stock Status
+
+Show availability status to customers based on variant stock:
+
+### Check if Product is Available
+
+```javascript
+function isProductAvailable(product) {
+  // Product is available if ANY variant has stock > 0
+  return product.item_variants?.some(variant => variant.stock > 0);
+}
+```
+
+### Get Available Variants
+
+```javascript
+function getAvailableVariants(product) {
+  // Return only variants with stock
+  return product.item_variants?.filter(variant => variant.stock > 0) || [];
+}
+```
+
+### Stock Display Component
+
+<CodeGroup>
+
+```jsx ProductVariantSelector.jsx
+import { useState } from 'react';
+
+function ProductVariantSelector({ product }) {
+  const [selectedVariant, setSelectedVariant] = useState(null);
+
+  const availableVariants = product.item_variants.filter(v => v.stock > 0);
+  const outOfStock = availableVariants.length === 0;
+
+  return (
+    <div>
+      <h3>Verfügbare Größen</h3>
+      
+      {outOfStock ? (
+        <div className="alert alert-warning">
+          Dieses Produkt ist derzeit ausverkauft
+        </div>
+      ) : (
+        <div className="variant-options">
+          {product.item_variants.map(variant => {
+            const available = variant.stock > 0;
+            
+            return (
+              <button
+                key={variant.id}
+                onClick={() => setSelectedVariant(variant)}
+                disabled={!available}
+                className={`
+                  variant-button
+                  ${selectedVariant?.id === variant.id ? 'selected' : ''}
+                  ${!available ? 'disabled' : ''}
+                `}
+              >
+                {variant.size}
+                {!available && ' (Ausverkauft)'}
+                {available && variant.stock <= 3 && (
+                  <span className="low-stock">Nur noch {variant.stock}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedVariant && (
+        <div className="selected-info">
+          <p>Ausgewählt: Größe {selectedVariant.size}</p>
+          <p>Preis: {selectedVariant.price.toFixed(2)} €</p>
+          <p>Verfügbar: {selectedVariant.stock} Stück</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+### Low Stock Warnings
+
+Show urgency indicators when stock is low:
+
+```jsx
+function StockBadge({ stock }) {
+  if (stock === 0) {
+    return <span className="badge badge-danger">Ausverkauft</span>;
+  }
+  
+  if (stock <= 3) {
+    return (
+      <span className="badge badge-warning">
+        Nur noch {stock} verfügbar
+      </span>
+    );
+  }
+  
+  if (stock <= 10) {
+    return <span className="badge badge-info">Wenige verfügbar</span>;
+  }
+  
+  return <span className="badge badge-success">Auf Lager</span>;
+}
+```
+
+## Admin Inventory Management
+
+<Note>
+  Stock levels are currently managed manually by admins through direct database updates. Consider building an admin interface for easier inventory management.
+</Note>
+
+### Updating Stock Levels
+
+Admins can update stock through Supabase RLS-protected queries:
+
+```javascript
+// Only works for authenticated admin users
+async function updateVariantStock(variantId, newStock) {
+  const { data, error } = await supabase
+    .from('item_variants')
+    .update({ stock: newStock })
+    .eq('id', variantId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Failed to update stock:', error);
+    return { success: false, error };
+  }
+
+  return { success: true, data };
+}
+```
+
+### Bulk Stock Updates
+
+Update multiple variants at once:
+
+```javascript
+async function bulkUpdateStock(updates) {
+  // updates: [{ id: 1, stock: 10 }, { id: 2, stock: 5 }, ...]
+  
+  const promises = updates.map(({ id, stock }) =>
+    supabase
+      .from('item_variants')
+      .update({ stock })
+      .eq('id', id)
+  );
+
+  const results = await Promise.all(promises);
+  const errors = results.filter(r => r.error);
+
+  return {
+    success: errors.length === 0,
+    updated: results.length - errors.length,
+    errors,
+  };
+}
+```
+
+## Inventory Reports
+
+### Low Stock Report
+
+Find variants that need restocking:
+
+```javascript
+async function getLowStockVariants(threshold = 5) {
+  const { data, error } = await supabase
+    .from('item_variants')
+    .select(`
+      id,
+      size,
+      stock,
+      price,
+      items:item_id (
+        id,
+        name,
+        status
+      )
+    `)
+    .lte('stock', threshold)
+    .order('stock', { ascending: true });
+
+  if (error) {
+    console.error('Failed to fetch low stock:', error);
+    return [];
+  }
+
+  // Only show variants for active products
+  return data.filter(v => v.items?.status === 'active');
+}
+```
+
+### Out of Stock Products
+
+Find products that are completely out of stock:
+
+```javascript
+async function getOutOfStockProducts() {
+  const { data: products } = await supabase
+    .from('items')
+    .select(`
+      id,
+      name,
+      status,
+      item_variants (id, stock)
+    `)
+    .eq('status', 'active');
+
+  // Filter to products where ALL variants have 0 stock
+  return products.filter(product => {
+    const variants = product.item_variants || [];
+    return variants.every(v => v.stock === 0);
+  });
+}
+```
+
+### Stock Value Report
+
+Calculate total inventory value:
+
+```javascript
+async function calculateInventoryValue() {
+  const { data: variants } = await supabase
+    .from('item_variants')
+    .select('stock, price');
+
+  const totalValue = variants.reduce((sum, v) => {
+    return sum + (v.stock * v.price);
+  }, 0);
+
+  const totalUnits = variants.reduce((sum, v) => sum + v.stock, 0);
+
+  return {
+    totalValue: totalValue.toFixed(2),
+    totalUnits,
+    averagePrice: (totalValue / totalUnits).toFixed(2),
+  };
+}
+```
+
+## Future Enhancements
+
+<Info>
+  Consider implementing these inventory features:
+
+  - **Automatic stock deduction**: Decrease stock when orders are marked as paid
+  - **Stock reservation**: Hold stock during checkout to prevent overselling
+  - **Restock notifications**: Alert admins when stock falls below threshold
+  - **Inventory history**: Track stock changes over time
+  - **SKU management**: Use the SKU field for barcode/warehouse integration
+  - **Backorder support**: Allow customers to order out-of-stock items
+</Info>
+
+## Best Practices
+
+### Always Validate Stock
+
+Never allow checkout without stock validation:
+
+```javascript
+// Good: validates stock before payment
+if (variant.stock < quantity) {
+  throw new Error('Insufficient stock');
+}
+
+// Bad: creates order without checking stock
+await createOrder(cartItems);
+```
+
+### Show Real-Time Availability
+
+Fetch fresh stock data when users view product pages:
+
+```javascript
+// Refetch on mount to ensure stock is current
+useEffect(() => {
+  fetchItemDetail(productId).then(({ data }) => {
+    setProduct(data);
+  });
+}, [productId]);
+```
+
+### Handle Concurrent Orders
+
+Be aware that stock can change between viewing and checkout. Consider implementing optimistic locking or stock reservation:
+
+```javascript
+// Basic race condition scenario:
+// User A adds last item to cart (stock: 1)
+// User B adds last item to cart (stock: 1)
+// Both proceed to checkout (stock is now oversold)
+
+// Solution: validate stock at checkout time, not just at add-to-cart
+```

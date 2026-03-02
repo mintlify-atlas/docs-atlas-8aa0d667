@@ -1,0 +1,230 @@
+---
+title: Product Variants
+description: Manage product variations including sizes, colors, stock levels, and SKUs
+---
+
+Product variants represent different versions of a product with unique attributes like size, color, price, and stock levels.
+
+## Variant Structure
+
+Each variant contains:
+- `item_id` - Parent product reference
+- `size` - Size identifier (e.g., "S", "M", "L", "38cm")
+- `price` - Variant-specific price (decimal)
+- `stock` - Available inventory count (integer)
+- `sku` - Stock Keeping Unit identifier
+
+**Database Table:** `item_variants`
+
+## Creating Variants
+
+Variants can be created in two ways:
+
+### 1. Quick Generation (Recommended)
+
+<Steps>
+  <Step title="Select Sizes">
+    Click preset size chips to select multiple sizes
+    
+    **Preset sizes:** XS, S, M, L, XL, XXL
+    
+    Located: `VariantsStep.jsx:41`
+  </Step>
+  
+  <Step title="Set Base Price">
+    Enter the price to apply to all generated variants
+    
+    Field: `basePrice` (supports decimals)
+  </Step>
+  
+  <Step title="Set Base Stock">
+    Enter initial stock quantity for all variants
+    
+    Field: `baseStock` (integer, minimum 0)
+  </Step>
+  
+  <Step title="Generate">
+    Click "Generate" button to create variants automatically
+    
+    Button shows selected count: "Generate {count} variants"
+  </Step>
+</Steps>
+
+### 2. Manual Creation
+
+Click "Add Manually" to create individual variants with custom sizes.
+
+**Use Cases:**
+- Non-standard sizes
+- Product-specific measurements
+- Custom variant attributes
+
+## Variant Editor
+
+Each variant displays as a card with fields:
+
+### Size Field
+
+```jsx
+// VariantsStep.jsx:117
+<input
+  value={variant.size}
+  onChange={e => updateVariantField(index, 'size', e.target.value)}
+  placeholder={t('admin.products.wizard.variants.sizePlaceholder')}
+  required
+/>
+```
+
+**Validation:** Must be non-empty string
+
+### Price Field
+
+```jsx
+<input
+  type="number"
+  step="0.01"
+  value={variant.price}
+  onChange={e => updateVariantField(index, 'price', e.target.value)}
+  required
+/>
+```
+
+<Warning>
+Price must be a positive decimal number. Negative prices are rejected during validation.
+</Warning>
+
+### Stock Field
+
+```jsx
+<input
+  type="number"
+  min={0}
+  value={variant.stock}
+  onChange={e => updateVariantField(index, 'stock', e.target.value)}
+/>
+```
+
+**Constraints:** Non-negative integer
+
+### SKU Display
+
+SKUs are auto-generated during product save:
+
+```javascript
+// ProductManager.jsx:189
+sku: variant.sku || buildSku(itemId, variant)
+```
+
+<Info>
+SKUs are automatically generated when creating new variants. Existing SKUs are preserved when editing.
+</Info>
+
+## Variant Management Page
+
+Access standalone variant management at `/admin/variants`
+
+### Features
+
+**Search:** Filter by size, SKU, or product name
+
+**Product Filter:** Dropdown to filter variants by product
+
+**Variant Cards Display:**
+- Product name
+- Size
+- Price (formatted with 2 decimals)
+- Stock count (with out-of-stock indicator)
+- SKU code
+
+### Creating Standalone Variants
+
+<Steps>
+  <Step title="Click New Variant">
+    Opens modal form with product selector
+  </Step>
+  
+  <Step title="Select Product">
+    Choose parent product from dropdown
+    
+    Field: `item_id` (required)
+  </Step>
+  
+  <Step title="Enter Details">
+    Fill in size, price, and stock fields
+  </Step>
+  
+  <Step title="Auto-Generate SKU">
+    SKU is generated automatically on save:
+    
+    Format: `SKU-{ITEM_ID}-{SIZE}`
+    
+    Located: `VariantManager.jsx:85`
+  </Step>
+</Steps>
+
+## Editing Variants
+
+Click the pencil icon to edit existing variants.
+
+**Editable Fields:**
+- Size
+- Price
+- Stock quantity
+
+**Read-Only:** SKU (displayed but disabled)
+
+## Deleting Variants
+
+<Warning>
+Deleting a variant is permanent. Ensure no active orders reference this variant.
+</Warning>
+
+Click trash icon → Confirm deletion
+
+**Implementation:** `VariantManager.jsx:117`
+
+## Price Calculation
+
+The parent product's display price is the minimum of all variant prices:
+
+```javascript
+// ProductManager.jsx:155
+const minPrice = Math.min(...validVariants.map(v => v.price));
+```
+
+This ensures customers see the starting price for products with multiple price points.
+
+## Stock Indicators
+
+Variants with zero stock display an out-of-stock class:
+
+```jsx
+// VariantManager.jsx:333
+<span className={`variant-stock ${variant.stock === 0 ? 'out-of-stock' : ''}`}>
+  Stock: {variant.stock}
+</span>
+```
+
+## Form Validation
+
+Variant validation checks:
+
+1. **Required fields:** `item_id`, `size`, `price`
+2. **Price validation:** Must be numeric and non-negative
+3. **Stock validation:** Must be non-negative integer
+4. **Code format:** SKU must match pattern `[a-z0-9_-]+`
+
+**Validation Function:** `VariantManager.jsx:59`
+
+## Empty States
+
+When no variants exist or filters return no results:
+
+```jsx
+// VariantsStep.jsx:160
+<div className="empty-state-inline">
+  <p>{t('admin.products.wizard.variants.noVariants')}</p>
+</div>
+```
+
+Shows different messages for empty list vs. filtered results.

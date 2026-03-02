@@ -1,0 +1,392 @@
+---
+title: "Product Catalog"
+description: "Product structure with categories, variants, colors, and image management"
+---
+
+## Overview
+
+The Sabbels Handmade product catalog is built on a flexible data model that supports hierarchical categories, product variants (size/color combinations), multiple images, and rich product metadata. All products are stored in Supabase with optimized queries for efficient catalog browsing.
+
+## Product Data Model
+
+The catalog uses several interconnected tables to represent products:
+
+### Items Table
+
+Core product information:
+
+```sql BDD_struct.sql:31
+create table public.items (
+  id           bigserial primary key,
+  name         text not null,
+  description  text,
+  price        numeric(10,2) not null check (price >= 0),
+  image_url    text,  -- deprecated: use item_images instead
+  category_id  bigint references public.categories(id),
+  status       text not null default 'draft'
+               check (status in ('draft','active','archived')),
+  pattern_type text check (pattern_type in ('rechtsmuster','gaensefuesschen')),
+  created_at   timestamp without time zone default now(),
+  updated_at   timestamp without time zone default now()
+);
+```
+
+<Info>
+  The `status` field controls product visibility: only `active` products appear in the shop. Use `draft` for products under development and `archived` for discontinued items.
+</Info>
+
+### Product Variants
+
+Variants represent specific SKUs with unique size, color, and inventory:
+
+```sql BDD_struct.sql:64
+create table public.item_variants (
+  id         bigserial primary key,
+  item_id    bigint not null references public.items(id) on delete cascade,
+  sku        text unique,
+  size       text,
+  stock      integer not null default 0 check (stock >= 0),
+  price      numeric(10,2) not null check (price >= 0),
+  created_at timestamp without time zone default now()
+);
+
+-- Each item can only have one variant per size
+create unique index ux_item_variants_combo
+  on public.item_variants (item_id, coalesce(size,''));
+```
+
+<Note>
+  Variant prices can differ from the base item price. The checkout system always uses the variant price when a variant is selected.
+</Note>
+
+### Colors
+
+Colors are managed in a separate table and linked to items:
+
+```sql BDD_struct.sql:14
+create table public.colors (
+  id         bigserial primary key,
+  name       text not null,
+  code       text not null unique,  -- e.g., "blue_navy"
+  hex_code   text not null unique check (hex_code ~ '^#([0-9A-Fa-f]{6})$'),
+  created_at timestamp without time zone default now()
+);
+
+create table public.item_colors (
+  item_id   bigint not null references public.items(id) on delete cascade,
+  color_id  bigint not null references public.colors(id) on delete restrict,
+  primary key (item_id, color_id)
+);
+```
+
+**Color Constraint**: Every item must have at least one color assigned, enforced by a database trigger.
+
+### Product Images
+
+Multiple images per product with positioning support:
+
+```sql BDD_struct.sql:56
+create table public.item_images (
+  id         bigserial primary key,
+  item_id    bigint not null references public.items(id) on delete cascade,
+  image_url  text not null,
+  position   integer default 0,  -- for custom ordering
+  created_at timestamp without time zone default now()
+);
+```
+
+## Hierarchical Categories
+
+Categories support parent-child relationships for multi-level organization:
+
+```sql BDD_struct.sql:4
+create table public.categories (
+  id          bigserial primary key,
+  name        text not null,
+  parent_id   bigint references public.categories(id) on delete cascade,
+  created_at  timestamp without time zone default now()
+);
+
+create unique index ux_categories_name_parent
+  on public.categories (name, parent_id);
+```
+
+### Example Category Structure
+
+```
+Kleidung (Clothing)
+├── Pullover (Sweaters)
+├── Schals (Scarves)
+└── Mützen (Hats)
+
+Wohnaccessoires (Home Accessories)
+├── Kissen (Pillows)
+└── Decken (Blankets)
+```
+
+## Fetching Products
+
+The items service provides optimized queries for different use cases:
+
+### All Products with Relations
+
+<CodeGroup>
+
+```javascript items.js:19
+export const fetchItemsWithRelations = async () => {
+  const { data, error } = await supabase
+    .from('items')
+    .select(`
+      *,
+      item_images ( image_url, position ),
+      item_variants ( id, size, price, stock ),
+      categories (
+        id,
+        name,
+        parent_id,
+        parent:parent_id ( id, name )
+      )
+    `)
+    .order('position', { foreignTable: 'item_images', ascending: true });
+  
+  return { data: data || [], error };
+};
+```
+
+</CodeGroup>
+
+This query returns:
+- All product fields
+- All images sorted by position
+- All available variants with stock info
+- Category hierarchy (category + parent category)
+
+### Single Product Details
+
+```javascript items.js:53
+export const fetchItemDetail = async (id) => {
+  const { data, error } = await supabase
+    .from('items')
+    .select(`
+      *,
+      item_images ( image_url, position ),
+      item_variants ( id, size, price, stock ),
+      categories (
+        id,
+        name,
+        parent_id,
+        parent:parent_id ( id, name )
+      )
+    `)
+    .eq('id', id)
+    .order('position', { foreignTable: 'item_images', ascending: true })
+    .single();
+  
+  return { data, error };
+};
+```
+
+### Latest Products
+
+```javascript items.js:3
+export const fetchLatestItems = async (limit = 4) => {
+  const { data, error } = await supabase
+    .from('items')
+    .select('*, item_images ( image_url, position ), item_variants ( id, size, price, stock )')
+    .order('created_at', { ascending: false })
+    .order('position', { foreignTable: 'item_images', ascending: true })
+    .limit(limit);
+  
+  return { data: data || [], error };
+};
+```
+
+### Related Products
+
+```javascript items.js:73
+export const fetchRelatedItems = async (categoryId, excludeId, limit = 4) => {
+  if (!categoryId) return { data: [], error: null };
+  
+  let query = supabase
+    .from('items')
+    .select(`
+      *,
+      item_images ( image_url, position ),
+      item_variants ( id, size, price, stock )
+    `)
+    .eq('category_id', categoryId)
+    .order('position', { foreignTable: 'item_images', ascending: true })
+    .limit(limit);
+  
+  if (excludeId) {
+    query = query.neq('id', excludeId);
+  }
+  
+  const { data, error } = await query;
+  return { data: data || [], error };
+};
+```
+
+## Product Display Structure
+
+When rendering products, the data comes in this structure:
+
+```javascript
+{
+  id: 1,
+  name: "Hand-Knitted Wool Scarf",
+  description: "Cozy winter scarf made from 100% merino wool",
+  price: 45.00,
+  status: "active",
+  pattern_type: "rechtsmuster",
+  category_id: 3,
+  created_at: "2024-01-15T10:30:00Z",
+  updated_at: "2024-01-20T14:45:00Z",
+  
+  // Nested relationships
+  item_images: [
+    { image_url: "https://...", position: 0 },
+    { image_url: "https://...", position: 1 }
+  ],
+  
+  item_variants: [
+    { id: 101, size: "S", price: 45.00, stock: 5 },
+    { id: 102, size: "M", price: 45.00, stock: 3 },
+    { id: 103, size: "L", price: 48.00, stock: 0 }  // Out of stock
+  ],
+  
+  categories: {
+    id: 3,
+    name: "Schals",
+    parent_id: 1,
+    parent: {
+      id: 1,
+      name: "Kleidung"
+    }
+  }
+}
+```
+
+## Displaying Products in Components
+
+Example component using product data:
+
+```jsx
+import { useState, useEffect } from 'react';
+import { fetchItemsWithRelations } from '../services/items';
+
+function ProductGrid() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadProducts() {
+      const { data, error } = await fetchItemsWithRelations();
+      if (!error) {
+        // Filter to only show active products
+        const activeProducts = data.filter(p => p.status === 'active');
+        setProducts(activeProducts);
+      }
+      setLoading(false);
+    }
+    loadProducts();
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <div className="grid">
+      {products.map(product => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+    </div>
+  );
+}
+
+function ProductCard({ product }) {
+  // Use first image or fallback
+  const image = product.item_images?.[0]?.image_url || '/placeholder.jpg';
+  
+  // Check if any variant is in stock
+  const inStock = product.item_variants?.some(v => v.stock > 0);
+  
+  // Find lowest variant price
+  const lowestPrice = Math.min(...product.item_variants.map(v => v.price));
+
+  return (
+    <div className="product-card">
+      <img src={image} alt={product.name} />
+      <h3>{product.name}</h3>
+      <p className="price">Ab {lowestPrice.toFixed(2)} €</p>
+      {!inStock && <span className="badge">Ausverkauft</span>}
+      {product.categories && (
+        <span className="category">
+          {product.categories.parent?.name} / {product.categories.name}
+        </span>
+      )}
+    </div>
+  );
+}
+```
+
+## Product Ratings
+
+Products can receive ratings from authenticated users:
+
+```sql BDD_struct.sql:82
+create table public.item_ratings (
+  id         bigserial primary key,
+  item_id    bigint not null references public.items(id) on delete cascade,
+  user_id    uuid not null references public.users(id) on delete cascade,
+  rating     integer not null check (rating between 1 and 5),
+  comment    text,
+  created_at timestamp without time zone default now(),
+  updated_at timestamp without time zone default now(),
+  unique (item_id, user_id)  -- One rating per user per product
+);
+```
+
+Fetch ratings for products:
+
+```javascript items.js:94
+export const fetchItemRatings = async (ids) => {
+  if (!ids?.length) return { data: [], error: null };
+  
+  return supabase
+    .from('item_ratings')
+    .select('item_id, rating')
+    .in('item_id', ids);
+};
+```
+
+## Best Practices
+
+### Always Load Variants
+
+Never display products without loading their variants, as stock and pricing depend on variant data:
+
+```javascript
+// Good: includes variants
+const { data } = await supabase
+  .from('items')
+  .select('*, item_variants(*)');
+
+// Bad: missing critical variant info
+const { data } = await supabase.from('items').select('*');
+```
+
+### Handle Missing Images
+
+Always provide fallback images:
+
+```javascript
+const imageUrl = product.item_images?.[0]?.image_url || '/placeholder.jpg';
+```
+
+### Filter by Status
+
+Only show `active` products to customers:
+
+```javascript
+const visibleProducts = products.filter(p => p.status === 'active');
+```

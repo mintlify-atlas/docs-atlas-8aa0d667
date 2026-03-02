@@ -1,0 +1,273 @@
+---
+title: 'Stripe Webhooks'
+description: 'Handle Stripe payment events and update order status'
+---
+
+## Endpoint
+
+```
+POST /api/stripe/webhook
+```
+
+Receives and processes Stripe webhook events for payment status updates. This endpoint is called directly by Stripe and should not be invoked manually.
+
+## Authentication
+
+<Warning>
+This endpoint uses Stripe signature verification instead of standard authentication. The `stripe-signature` header must be present and valid.
+</Warning>
+
+Stripe signs all webhook events with your webhook secret. The API verifies the signature using:
+
+```javascript
+stripe.webhooks.constructEvent(req.body, signature, STRIPE_WEBHOOK_SECRET)
+```
+
+## Request Headers
+
+<ParamField header="stripe-signature" type="string" required>
+  Stripe webhook signature for request verification
+</ParamField>
+
+<ParamField header="content-type" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+## Request Body
+
+The request body is the raw Stripe event object. The API expects the raw body buffer, not parsed JSON.
+
+<Note>
+This endpoint uses `express.raw({ type: 'application/json' })` middleware to preserve the raw body for signature verification.
+</Note>
+
+## Supported Events
+
+### payment_intent.succeeded
+
+Triggered when a payment is successfully completed.
+
+**Actions:**
+- Updates order status to `paid`
+- Sends order confirmation email to shop owner
+
+**Metadata:**
+- `order_id` - Used to identify and update the order
+- `user_id` - Customer user ID
+
+### payment_intent.payment_failed
+
+Triggered when a payment attempt fails.
+
+**Actions:**
+- Updates order status to `failed`
+
+### payment_intent.canceled
+
+Triggered when a payment intent is canceled.
+
+**Actions:**
+- Updates order status to `canceled`
+
+## Response
+
+<ResponseField name="received" type="boolean">
+  Always returns `true` to acknowledge receipt of the webhook
+</ResponseField>
+
+## Error Codes
+
+| Status Code | Error Message | Description |
+|-------------|---------------|-------------|
+| `400` | `Webhook Error: {message}` | Signature verification failed or invalid payload |
+| `500` | `Internal webhook error` | Error processing the webhook event |
+
+## Event Processing Flow
+
+1. **Signature Verification**: Validates the Stripe signature
+2. **Event Type Check**: Determines the event type
+3. **Order Lookup**: Extracts `order_id` from payment intent metadata
+4. **Status Update**: Updates the order status in Supabase
+5. **Email Notification**: Sends confirmation email (for succeeded events)
+6. **Acknowledgment**: Returns success response to Stripe
+
+## Order Confirmation Email
+
+When a payment succeeds, an automated email is sent to `sabbelshandmade@gmail.com` containing:
+
+- Order ID and date
+- Customer name and email
+- List of ordered items with sizes, colors, and quantities
+- Total amount
+- Payment status
+
+**Email Template Features:**
+- Responsive HTML design
+- Sabbels Handmade branding
+- Detailed product breakdown
+- Customer contact information for follow-up
+
+## Example Webhook Event
+
+```json
+{
+  "id": "evt_1AbCdEfGhIjKlMnO",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "data": {
+    "object": {
+      "id": "pi_3AbcDefGhiJkLmNo",
+      "object": "payment_intent",
+      "amount": 4500,
+      "currency": "eur",
+      "status": "succeeded",
+      "metadata": {
+        "order_id": "550e8400-e29b-41d4-a716-446655440000",
+        "user_id": "auth0|123456789"
+      }
+    }
+  }
+}
+```
+
+## Setting Up Webhooks in Stripe
+
+### 1. Create Webhook Endpoint
+
+In your Stripe Dashboard:
+
+1. Go to **Developers** → **Webhooks**
+2. Click **Add endpoint**
+3. Enter your endpoint URL: `https://your-api-domain.com/api/stripe/webhook`
+4. Select events to listen to:
+   - `payment_intent.succeeded`
+   - `payment_intent.payment_failed`
+   - `payment_intent.canceled`
+
+### 2. Get Webhook Secret
+
+After creating the endpoint, Stripe will provide a webhook signing secret (starts with `whsec_`). Add this to your environment variables:
+
+```bash
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+```
+
+### 3. Test Webhooks
+
+Use the Stripe CLI to test webhooks locally:
+
+```bash
+# Forward webhooks to local server
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+
+# Trigger test event
+stripe trigger payment_intent.succeeded
+```
+
+## Error Handling
+
+The webhook endpoint implements comprehensive error handling:
+
+### Signature Verification Errors
+
+```json
+{
+  "error": "Webhook Error: No signatures found matching the expected signature"
+}
+```
+
+**Resolution:** Verify that `STRIPE_WEBHOOK_SECRET` is correctly configured.
+
+### Order Update Errors
+
+If the order update fails, the error is logged but the webhook still returns success to Stripe:
+
+```javascript
+if (updateError) {
+  console.error(`[Webhook] Failed to update order ${orderId}:`, updateError)
+}
+```
+
+**Resolution:** Check Supabase connection and order ID validity.
+
+### Email Sending Errors
+
+Email errors are logged but don't affect the webhook response:
+
+```javascript
+catch (emailErr) {
+  console.error(`[Webhook] Failed to send email for order ${orderId}:`, emailErr)
+}
+```
+
+**Resolution:** Verify `RESEND_API_KEY` is configured correctly.
+
+## Logging
+
+The webhook endpoint provides detailed logging:
+
+```
+[Webhook] Received event: payment_intent.succeeded
+[Webhook] Payment succeeded for order: 550e8400-e29b-41d4-a716-446655440000
+[Webhook] Order 550e8400-e29b-41d4-a716-446655440000 marked as paid
+[Webhook] Email sent for order 550e8400-e29b-41d4-a716-446655440000
+```
+
+## Security Considerations
+
+<Warning>
+**Important Security Notes:**
+- Never disable signature verification
+- Keep your webhook secret secure
+- Don't expose the webhook endpoint in CORS configuration
+- Monitor webhook logs for suspicious activity
+- Validate all order IDs exist before updating
+</Warning>
+
+## Webhook Retry Logic
+
+Stripe automatically retries failed webhook deliveries:
+
+- Retries for up to 3 days
+- Uses exponential backoff
+- Stops retrying after receiving a 2xx response
+
+**Best Practice:** Always return a 200 status code quickly, then process the event asynchronously if needed.
+
+## Testing Webhooks
+
+### Using Stripe CLI
+
+```bash
+# Install Stripe CLI
+brew install stripe/stripe-cli/stripe
+
+# Login to Stripe
+stripe login
+
+# Listen for webhooks
+stripe listen --forward-to http://localhost:3000/api/stripe/webhook
+
+# In another terminal, trigger events
+stripe trigger payment_intent.succeeded
+stripe trigger payment_intent.payment_failed
+stripe trigger payment_intent.canceled
+```
+
+### Manual Testing
+
+1. Create a test payment in Stripe Dashboard
+2. Add metadata: `order_id` and `user_id`
+3. Complete or fail the payment
+4. Verify order status updates in Supabase
+5. Check email delivery (if configured)
+
+## Notes
+
+<Note>
+- Webhooks may arrive out of order or multiple times (idempotency is important)
+- The endpoint processes events synchronously for simplicity
+- Email sending errors don't affect order status updates
+- Unhandled event types are logged and ignored
+- Raw body parsing is required for signature verification
+</Note>

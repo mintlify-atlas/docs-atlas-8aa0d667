@@ -1,0 +1,389 @@
+---
+title: 'User Account'
+description: 'Manage your profile, authentication, and account settings'
+---
+
+# User Account
+
+Your user account gives you access to personalized features, order tracking, and a seamless shopping experience at Sabbels Handmade.
+
+## Creating an Account
+
+### Sign Up Process
+
+<Steps>
+  <Step title="Access registration">
+    Navigate to the sign-up page:
+    - Click **"Sign Up"** in the navigation bar
+    - Or visit `/signup` directly
+  </Step>
+  <Step title="Enter email address">
+    Provide a valid email address:
+    - Must be in valid email format (e.g., user@example.com)
+    - Will be normalized to lowercase
+    - Must be unique (not already registered)
+  </Step>
+  <Step title="Create password">
+    Choose a secure password:
+    - Minimum 6 characters required
+    - Password strength indicator shows security level
+    - Toggle visibility with the show/hide button
+  </Step>
+  <Step title="Submit registration">
+    Click **"Sign Up"** to create your account
+  </Step>
+  <Step title="Automatic login">
+    After successful registration, you're automatically logged in and redirected to the home page
+  </Step>
+</Steps>
+
+### Password Requirements
+
+Your password must:
+- Be at least 6 characters long
+- Be different from your email
+
+### Password Strength Indicator
+
+As you type, the strength indicator shows:
+
+| Score | Strength | Criteria |
+|-------|----------|----------|
+| 0 | Empty | No password entered |
+| 1 | Weak | Less than 8 characters |
+| 2 | Fair | 8+ characters |
+| 3 | Good | 8+ chars with uppercase/lowercase |
+| 4 | Strong | Good + numbers |
+| 5 | Very Strong | Strong + special characters |
+
+<Tip>
+  For better security, use a password with at least 8 characters including uppercase, lowercase, numbers, and special characters.
+</Tip>
+
+### Email Validation
+
+The registration form validates your email in real-time:
+- Format checking (must include @ and domain)
+- Visual feedback when invalid
+- Error message appears after you leave the field (on blur)
+
+### Sign Up Errors
+
+Common registration errors:
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "Email already registered" | Email exists in system | Use different email or log in |
+| "Invalid email format" | Email format incorrect | Check for typos, ensure @ and domain |
+| "Password too short" | Less than 6 characters | Use longer password |
+| "Unexpected error" | Server or network issue | Try again or contact support |
+
+## Logging In
+
+### Login Process
+
+<Steps>
+  <Step title="Navigate to login">
+    Access the login page:
+    - Click **"Log In"** in navigation
+    - Or visit `/login` directly
+  </Step>
+  <Step title="Enter credentials">
+    Provide your:
+    - Email address (case-insensitive)
+    - Password
+  </Step>
+  <Step title="Submit login">
+    Click **"Log In"** button
+  </Step>
+  <Step title="Redirect">
+    After successful login:
+    - Regular users: Redirected to home page (`/`)
+    - Admin users: Redirected to admin dashboard (`/admin`)
+  </Step>
+</Steps>
+
+### Auto-Redirect for Logged-In Users
+
+If you're already logged in and visit the login page:
+- You're automatically redirected based on your role
+- No need to log in again
+- Session is preserved
+
+### Login Errors
+
+Common login issues:
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "Invalid credentials" | Wrong email/password | Check credentials, reset password |
+| "User not found" | Email not registered | Sign up first or check email spelling |
+| "Account locked" | Too many failed attempts | Contact support |
+| "Session expired" | Previous session timed out | Log in again |
+
+<Note>
+  Email addresses are case-insensitive and automatically normalized to lowercase during login.
+</Note>
+
+## Profile Page
+
+### Accessing Your Profile
+
+Navigate to your profile:
+- Click your name or profile icon in navigation
+- Select **"Profile"** from dropdown
+- Or visit `/profile` directly
+
+### Profile Sections
+
+The profile page is organized into several sections:
+
+#### Hero Section
+
+**Displays:**
+- Personalized greeting with your name
+- Account status (e.g., "Active Account")
+- Member since date
+- Quick action buttons:
+  - Browse Products
+  - View Cart
+
+#### Account Information Grid
+
+Shows your key account details:
+
+| Field | Description |
+|-------|-------------|
+| **Full Name** | Your display name (or derived from email) |
+| **Email** | Registered email address |
+| **Member Since** | Account creation date |
+| **Role** | Account type (client/admin) |
+
+<Info>
+  Your display name is derived from your full name, username, or email address (in that order of preference).
+</Info>
+
+#### Quick Actions
+
+Access common tasks directly:
+- **My Orders**: View order history and track status
+- **View Cart**: Check current shopping cart
+- **Browse Collection**: Explore product catalog
+
+#### Security & Support
+
+Two panels provide information about:
+
+**Account Security**
+- Secure authentication details
+- Data protection information
+
+**Help & Support**
+- Links to Orders
+- FAQ access
+- Collection browsing
+
+#### Account Summary Sidebar
+
+A highlighted card showing:
+- Email address
+- Username (if set)
+- Full name (if set)
+- Account role
+
+#### Order History Prompt
+
+A call-to-action card encouraging you to:
+- View past orders
+- Track order status
+- Access order details
+
+## Profile Information
+
+### Display Name
+
+Your display name is determined by (in priority order):
+1. `full_name` field in user profile
+2. `username` field in user profile
+3. Email prefix (part before @)
+4. "Guest" as fallback
+
+### Member Since Date
+
+Shows when your account was created:
+- Formatted according to your language setting
+- French: "janvier 2026"
+- German: "Januar 2026"
+- Includes month and year
+
+### Account Role
+
+Two roles available:
+- **Client**: Regular customer account
+- **Admin**: Administrative access (shop management)
+
+<Note>
+  Most users have the "client" role. Admin roles are reserved for shop managers and staff.
+</Note>
+
+## Authentication & Sessions
+
+### Session Management
+
+Your login session:
+- Persists across browser tabs
+- Remains active until you log out
+- Automatically refreshes when needed
+- Stored securely in browser
+
+### User Data Context
+
+When logged in, the system tracks:
+- Session token (for API authentication)
+- User ID (for data fetching)
+- User profile data (name, email, role)
+- Authentication state
+
+### Logout Process
+
+To log out:
+1. Click your profile icon/name in navigation
+2. Select **"Log Out"** from dropdown
+3. Session is cleared
+4. Redirected to home page
+5. Cart data persists in browser storage
+
+## Profile for Logged-Out Users
+
+If you visit `/profile` while logged out:
+
+**You'll see:**
+- Welcome message
+- Explanation of account benefits
+- Two action buttons:
+  - **Log In**: Go to login page
+  - **Sign Up**: Create new account
+
+## Account Benefits
+
+Having an account allows you to:
+- **Place Orders**: Required for checkout
+- **Track Orders**: View order history and status
+- **Save Cart**: Cart persists across sessions
+- **Faster Checkout**: Saved email for future orders
+- **Personalized Experience**: Tailored recommendations and communications
+
+## Localization
+
+Profile content is available in multiple languages:
+- French (fr)
+- German (de)
+
+Language affects:
+- All interface text
+- Date formats
+- Button labels
+- Messages and prompts
+
+## Mobile Experience
+
+### Mobile Profile Layout
+
+- Hero section stacks vertically
+- Action buttons display in a column
+- Information grid becomes single column
+- Sidebar moves below main content
+- All features remain accessible
+
+### Mobile Navigation
+
+- Profile accessible via menu icon
+- Touch-friendly button sizes
+- Smooth scrolling between sections
+- Optimized tap targets
+
+## Security Features
+
+### Password Security
+
+- Passwords are hashed (never stored in plain text)
+- Secure transmission over HTTPS
+- Protected by authentication service
+
+### Email Normalization
+
+For consistency and security:
+- Emails converted to lowercase
+- Whitespace trimmed
+- Prevents duplicate accounts with case variations
+
+### Session Security
+
+- Session tokens expire after inactivity
+- Tokens stored securely in browser
+- API requests require valid authentication
+- Protected against CSRF attacks
+
+<Info>
+  Sabbels takes your privacy and security seriously. Review the Privacy Policy for complete details.
+</Info>
+
+## Data Management
+
+### User Profile Storage
+
+Your profile data is stored in:
+- **auth.users** table (authentication)
+- **public.users** table (profile information)
+
+### Profile Creation
+
+When you sign up:
+1. Authentication record created
+2. User profile record inserted
+3. Default role assigned ("client")
+4. Email stored in both tables
+
+### Profile Updates
+
+Currently, profile information is set at registration. Future updates may include:
+- Edit full name
+- Change password
+- Update preferences
+- Manage addresses
+
+## Troubleshooting
+
+### Can't Log In
+
+<Steps>
+  <Step title="Verify credentials">
+    Double-check email and password
+  </Step>
+  <Step title="Check email format">
+    Ensure email includes @ and domain
+  </Step>
+  <Step title="Reset password">
+    If available, use password reset feature (coming soon)
+  </Step>
+  <Step title="Contact support">
+    If issues persist, reach out for help
+  </Step>
+</Steps>
+
+### Profile Not Loading
+
+- Refresh the page
+- Clear browser cache
+- Log out and log back in
+- Check internet connection
+
+### Session Expired
+
+- Log in again
+- Sessions may expire after prolonged inactivity
+- Your cart data is preserved
+
+<Tip>
+  Keep your browser updated and enable cookies to ensure the best experience with authentication and sessions.
+</Tip>

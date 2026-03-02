@@ -1,0 +1,321 @@
+---
+title: Customer Management
+description: Manage user accounts, roles, and view customer order history
+---
+
+The User Manager provides tools for managing customer accounts, assigning roles, and tracking customer activity.
+
+## User List
+
+The main table displays all registered users with key information:
+
+**Columns:**
+- Email
+- Account creation date
+- Role (with inline role selector)
+- Total orders
+- Total spent
+- Actions (Details, Delete)
+
+**Implementation:** `UserManager.jsx:150`
+
+## User Roles
+
+The system supports two user roles:
+
+### Role Options
+
+```javascript
+// UserManager.jsx:32
+const roleOptions = useMemo(
+  () => [
+    { value: 'client', label: t('admin.users.roles.client') },
+    { value: 'admin', label: t('admin.users.roles.admin') },
+  ],
+  [t]
+);
+```
+
+**Client Role:**
+- Standard customer account
+- Can place orders
+- Cannot access admin panel
+
+**Admin Role:**
+- Full administrative access
+- Can manage products, orders, users
+- Access to all admin features
+
+### Role Styling
+
+Roles are color-coded:
+
+```javascript
+// UserManager.jsx:7
+const getRoleStyle = role => {
+  const colors = {
+    admin: { bg: 'var(--adm-danger)', text: 'var(--color-surface)' },
+    client: { bg: 'var(--adm-success)', text: 'var(--color-surface)' },
+  };
+  const palette = colors[role] || { bg: 'var(--color-complementary)', text: 'var(--color-text-primary)' };
+  return {
+    backgroundColor: palette.bg,
+    color: palette.text,
+    padding: '4px 8px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: 600,
+  };
+};
+```
+
+- **Admin:** Red background (danger color)
+- **Client:** Green background (success color)
+
+## Changing User Roles
+
+<Steps>
+  <Step title="Select New Role">
+    Use the dropdown in the user's table row
+    
+    Located: `UserManager.jsx:171`
+  </Step>
+  
+  <Step title="Automatic Update">
+    Role updates immediately on selection
+    
+    ```javascript
+    // UserManager.jsx:74
+    const handleRoleChange = async (userId, newRole) => {
+      const { error: roleErr } = await updateUserRole(userId, newRole);
+      if (roleErr) {
+        pushToast({ message: t('admin.users.error.roleUpdate'), variant: 'error' });
+      } else {
+        fetchUsers();
+        if (selectedUser && selectedUser.id === userId) {
+          setSelectedUser({ ...selectedUser, role: newRole });
+        }
+        pushToast({ message: t('admin.users.success.roleUpdate'), variant: 'success' });
+      }
+    };
+    ```
+  </Step>
+  
+  <Step title="UI Refresh">
+    User list and detail view update to reflect new role
+  </Step>
+</Steps>
+
+<Warning>
+Changing a user to admin gives them full access to all administrative functions. Use this role carefully.
+</Warning>
+
+## Filtering and Search
+
+### Role Filter
+
+Dropdown to filter users by role:
+
+```jsx
+// UserManager.jsx:133
+<select value={filterRole} onChange={e => setFilterRole(e.target.value)}>
+  <option value="all">{t('admin.users.manager.allRoles')}</option>
+  {roleOptions.map(opt => (
+    <option key={opt.value} value={opt.value}>
+      {opt.label}
+    </option>
+  ))}
+</select>
+```
+
+**Options:** All Roles, Client, Admin
+
+### Email Search
+
+Search input filters by email address:
+
+```javascript
+// UserManager.jsx:60
+if (searchTerm) {
+  const q = searchTerm.toLowerCase();
+  filtered = filtered.filter(user => user.email?.toLowerCase().includes(q));
+}
+```
+
+Search is case-insensitive and matches partial emails.
+
+## User Statistics
+
+Each user displays order metrics:
+
+```javascript
+// UserManager.jsx:108
+const statsByUser = useMemo(() => {
+  const map = new Map();
+  users.forEach(user => {
+    const orders = user.orders || [];
+    const totalOrders = orders.length;
+    const totalSpent = orders
+      .filter(order => ['paid', 'shipped'].includes(order.status))
+      .reduce((total, order) => total + (order.total || 0), 0);
+    map.set(user.id, { totalOrders, totalSpent });
+  });
+  return map;
+}, [users]);
+```
+
+**Metrics:**
+- **Total Orders:** Count of all orders
+- **Total Spent:** Sum of paid and shipped order totals
+
+<Info>
+Only orders with status "paid" or "shipped" count toward total spent, excluding pending and cancelled orders.
+</Info>
+
+## User Details Panel
+
+Click "Details" button to open detailed user view:
+
+### Information Displayed
+
+```jsx
+// UserManager.jsx:199
+<div>
+  <h3>{t('admin.users.manager.userDetailsTitle')}</h3>
+  <p><strong>{t('admin.users.manager.labels.email')}</strong> {selectedUser.email}</p>
+  <p><strong>{t('admin.users.manager.labels.createdAt')}</strong> {formatDate(selectedUser.created_at)}</p>
+  <p><strong>{t('admin.users.manager.labels.role')}</strong> {roleLabelMap[selectedUser.role] || selectedUser.role}</p>
+  <p><strong>{t('admin.users.manager.labels.orders')}</strong></p>
+  <ul>
+    {selectedUser.orders && selectedUser.orders.map(order => (
+      <li key={order.id}>
+        {formatDate(order.created_at)} - {order.status} - {order.total ?? 0} €
+      </li>
+    ))}
+  </ul>
+</div>
+```
+
+**Fields:**
+- Email address
+- Account creation date
+- Current role
+- Order history list (date, status, total)
+
+## Date Formatting
+
+Dates are formatted based on locale:
+
+```javascript
+// UserManager.jsx:99
+const formatDate = useCallback(dateString => {
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'de-DE';
+  return new Date(dateString).toLocaleDateString(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}, [i18n.language]);
+```
+
+**Locales:**
+- French (fr): `fr-FR` format
+- German (de): `de-DE` format
+
+## Deleting Users
+
+<Warning>
+Deleting a user is permanent and may orphan their orders. Consider deactivation instead.
+</Warning>
+
+<Steps>
+  <Step title="Click Delete Button">
+    Click "Delete" link in user's table row
+    
+    Located: `UserManager.jsx:189`
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm in browser dialog
+    
+    ```javascript
+    // UserManager.jsx:88
+    if (!window.confirm(t('admin.users.confirm.delete'))) return;
+    ```
+  </Step>
+  
+  <Step title="Delete User">
+    User record is removed from database
+    
+    ```javascript
+    const { error: delErr } = await deleteUserService(userId);
+    if (delErr) {
+      pushToast({ message: t('admin.users.error.delete'), variant: 'error' });
+    } else {
+      fetchUsers();
+      if (selectedUser && selectedUser.id === userId) setSelectedUser(null);
+      pushToast({ message: t('admin.users.success.delete'), variant: 'success' });
+    }
+    ```
+  </Step>
+</Steps>
+
+## Data Loading
+
+Users are fetched with their orders:
+
+```javascript
+// UserManager.jsx:49
+const fetchUsers = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const { data, error: fetchErr } = await listUsers();
+    if (fetchErr) throw fetchErr;
+
+    let filtered = data || [];
+    if (filterRole !== 'all') {
+      filtered = filtered.filter(u => u.role === filterRole);
+    }
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter(user => user.email?.toLowerCase().includes(q));
+    }
+
+    setUsers(filtered);
+  } catch (err) {
+    console.error('User loading error:', err);
+    setError(t('admin.users.error.load'));
+  } finally {
+    setLoading(false);
+  }
+}, [filterRole, searchTerm, t]);
+```
+
+**Dependencies:**
+- Filters applied during fetch
+- Loading and error states managed
+- Orders included via join
+
+## Error Handling
+
+Errors show appropriate messages:
+
+- **Load Error:** `admin.users.error.load`
+- **Role Update Error:** `admin.users.error.roleUpdate`
+- **Delete Error:** `admin.users.error.delete`
+
+Success toasts confirm actions:
+
+- **Role Updated:** `admin.users.success.roleUpdate`
+- **User Deleted:** `admin.users.success.delete`
+
+## User Table Styling
+
+The users table is located at:
+
+**Component:** `client/src/components/Admin/UserManager.jsx:150`
+
+**CSS Class:** `.users-table`
+
+Responsive design ensures readability on all screen sizes.

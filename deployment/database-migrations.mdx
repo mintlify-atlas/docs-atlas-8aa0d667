@@ -1,0 +1,521 @@
+---
+title: 'Database Migrations on Supabase'
+description: 'Run and manage database migrations for the Sabbels e-commerce schema'
+---
+
+The Sabbels e-commerce platform uses PostgreSQL via Supabase with a comprehensive migration system for schema changes and data updates.
+
+## Database Architecture
+
+The database consists of 4 main modules:
+
+| Module | Tables | Purpose |
+|--------|--------|--------|
+| **Catalog** | `categories`, `colors`, `items`, `item_variants`, `item_images`, `item_colors`, `item_ratings` | Product catalog with variants, colors, and reviews |
+| **Orders** | `orders`, `order_items` | Customer orders and line items |
+| **Payments** | `payments`, `payment_events` | Stripe payment tracking and webhook events |
+| **Users** | `users`, `customer_photos` | User accounts with role-based access (client/admin) |
+
+## Prerequisites
+
+<Info>
+  - Supabase project created
+  - Project API keys (anon key + service role key)
+  - SQL Editor access in Supabase dashboard
+</Info>
+
+## Initial Database Setup
+
+<Steps>
+<Step title="Run Base Schema">
+
+Execute `Database/BDD_struct.sql` in the Supabase SQL Editor:
+
+1. Navigate to **SQL Editor** in Supabase dashboard
+2. Click **New query**
+3. Copy and paste the contents of `BDD_struct.sql`
+4. Click **Run** or press `Cmd/Ctrl + Enter`
+
+This creates:
+- All tables with proper constraints
+- Foreign key relationships
+- Indexes for performance
+- Check constraints for data integrity
+
+<Warning>
+  Run this script only once during initial setup. For subsequent changes, use migration files.
+</Warning>
+
+</Step>
+
+<Step title="Apply Row Level Security (RLS)">
+
+Execute `Database/RLS.sql` to enable security policies:
+
+```sql
+-- Example RLS policy structure
+ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
+
+-- Public read access for active items
+CREATE POLICY "items: public read active"
+  ON public.items FOR SELECT
+  TO anon, authenticated
+  USING (status = 'active');
+
+-- Admin full access
+CREATE POLICY "items: admin full access"
+  ON public.items FOR ALL
+  TO authenticated
+  USING (public.is_admin(auth.uid()));
+```
+
+**RLS Summary**:
+- **Public**: Read catalog (items, categories, colors, reviews)
+- **Authenticated users**: Manage own orders and reviews
+- **Admins**: Full access to all tables
+
+</Step>
+
+<Step title="Seed Initial Data (Optional)">
+
+Run `Database/SEED.sql` to populate with demo data:
+
+- Admin user account
+- Sample categories (Körbe, Bestseller, Kollektionen)
+- Demo products with variants and images
+- Test orders with payment records
+
+<Note>
+  The seed script is idempotent - safe to run multiple times.
+</Note>
+
+</Step>
+</Steps>
+
+## Migration Files
+
+Migrations are stored in `Database/migrations/` with timestamp-based naming:
+
+```
+20251222_insert_categories.sql
+20251222_insert_colors.sql
+20251222_create_item_with_colors_rpc.sql
+20251226_add_pattern_type_to_items.sql
+20251229_remove_pattern_type_from_items.sql
+20250105_remove_item_colors.sql
+20250105_add_position_to_item_images.sql
+20260214_create_customer_photos.sql
+20260214_drop_testimonials.sql
+```
+
+### Migration Naming Convention
+
+```
+YYYYMMDD_description_of_change.sql
+```
+
+- **YYYYMMDD**: Date in ISO format
+- **description**: Lowercase with underscores
+- **.sql**: PostgreSQL SQL file
+
+## Running Migrations
+
+<Steps>
+<Step title="Check Current State">
+
+Before running migrations, verify which have been applied:
+
+```sql
+-- Query to check table structure
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'items';
+
+-- Check if a column exists
+SELECT EXISTS (
+  SELECT 1 
+  FROM information_schema.columns 
+  WHERE table_name = 'item_images' 
+  AND column_name = 'position'
+);
+```
+
+</Step>
+
+<Step title="Execute Migration Files">
+
+Run migrations in chronological order (oldest first):
+
+<CodeGroup>
+
+```sql Via SQL Editor
+-- Example: Add position to item_images
+-- From: 20250105_add_position_to_item_images.sql
+
+ALTER TABLE public.item_images 
+ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_item_images_position 
+ON public.item_images(item_id, position ASC);
+```
+
+```sql Via Supabase CLI
+# Install Supabase CLI
+npm install -g supabase
+
+# Login
+supabase login
+
+# Link to your project
+supabase link --project-ref your-project-ref
+
+# Run migration
+supabase db push
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Verify Migration">
+
+Confirm the changes were applied:
+
+```sql
+-- Verify new column
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'item_images' 
+AND column_name = 'position';
+
+-- Check index creation
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'item_images';
+```
+
+</Step>
+
+<Step title="Test with Sample Query">
+
+Run a test query to ensure data integrity:
+
+```sql
+-- Test the new position column
+SELECT id, item_id, image_url, position
+FROM public.item_images
+ORDER BY item_id, position ASC
+LIMIT 10;
+```
+
+</Step>
+</Steps>
+
+## Example Migrations
+
+<Tabs>
+  <Tab title="Add Column">
+    
+    **Migration**: `20250105_add_position_to_item_images.sql`
+    
+    ```sql
+    -- Add position column for image ordering
+    ALTER TABLE public.item_images 
+    ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;
+    
+    -- Create index for efficient ordering
+    CREATE INDEX IF NOT EXISTS idx_item_images_position 
+    ON public.item_images(item_id, position ASC);
+    
+    -- Update existing rows with sequential positions
+    WITH ranked AS (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY created_at) - 1 AS pos
+      FROM public.item_images
+    )
+    UPDATE public.item_images
+    SET position = ranked.pos
+    FROM ranked
+    WHERE item_images.id = ranked.id;
+    ```
+    
+  </Tab>
+  
+  <Tab title="Insert Data">
+    
+    **Migration**: `20251222_insert_categories.sql`
+    
+    ```sql
+    -- Insert main category
+    INSERT INTO public.categories (name, parent_id) 
+    VALUES ('Körbe', NULL)
+    ON CONFLICT DO NOTHING;
+    
+    -- Insert subcategories
+    INSERT INTO public.categories (name, parent_id)
+    SELECT 'Ovale Körbe', id 
+    FROM public.categories 
+    WHERE name = 'Körbe' AND parent_id IS NULL
+    ON CONFLICT DO NOTHING;
+    
+    INSERT INTO public.categories (name, parent_id)
+    SELECT 'Runde Körbe', id 
+    FROM public.categories 
+    WHERE name = 'Körbe' AND parent_id IS NULL
+    ON CONFLICT DO NOTHING;
+    ```
+    
+  </Tab>
+  
+  <Tab title="Create Table">
+    
+    **Migration**: `20260214_create_customer_photos.sql`
+    
+    ```sql
+    -- Create customer photos table
+    CREATE TABLE IF NOT EXISTS public.customer_photos (
+      id          BIGSERIAL PRIMARY KEY,
+      image_url   TEXT NOT NULL,
+      position    INTEGER NOT NULL DEFAULT 0,
+      is_visible  BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+    );
+    
+    -- Create index for visible photos
+    CREATE INDEX IF NOT EXISTS idx_customer_photos_visible
+    ON public.customer_photos(is_visible, position ASC)
+    WHERE is_visible = true;
+    
+    -- Enable RLS
+    ALTER TABLE public.customer_photos ENABLE ROW LEVEL SECURITY;
+    
+    -- Public read for visible photos
+    CREATE POLICY "customer_photos: public read visible"
+    ON public.customer_photos FOR SELECT
+    TO anon, authenticated
+    USING (is_visible = true);
+    
+    -- Admin full access
+    CREATE POLICY "customer_photos: admin full access"
+    ON public.customer_photos FOR ALL
+    TO authenticated
+    USING (public.is_admin(auth.uid()));
+    ```
+    
+  </Tab>
+  
+  <Tab title="Drop Table">
+    
+    **Migration**: `20260214_drop_testimonials.sql`
+    
+    ```sql
+    -- Drop testimonials table (replaced by customer_photos)
+    DROP TABLE IF EXISTS public.testimonials CASCADE;
+    
+    -- Remove related policies (automatically dropped with CASCADE)
+    -- No additional cleanup needed
+    ```
+    
+  </Tab>
+</Tabs>
+
+## Creating New Migrations
+
+<Steps>
+<Step title="Create Migration File">
+
+Create a new file in `Database/migrations/`:
+
+```bash
+touch Database/migrations/$(date +%Y%m%d)_add_product_tags.sql
+```
+
+</Step>
+
+<Step title="Write Migration SQL">
+
+```sql
+-- Migration: Add tags to products
+-- Created: 2026-03-02
+
+CREATE TABLE IF NOT EXISTS public.tags (
+  id         BIGSERIAL PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.item_tags (
+  item_id    BIGINT NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
+  tag_id     BIGINT NOT NULL REFERENCES public.tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (item_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_item_tags_tag ON public.item_tags(tag_id);
+
+-- Enable RLS
+ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.item_tags ENABLE ROW LEVEL SECURITY;
+
+-- Public read, admin write
+CREATE POLICY "tags: public read" ON public.tags FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "tags: admin write" ON public.tags FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
+```
+
+</Step>
+
+<Step title="Test Locally">
+
+Run the migration in a development Supabase project first:
+
+```bash
+# Test in dev environment
+supabase db reset --local
+supabase db push
+```
+
+</Step>
+
+<Step title="Deploy to Production">
+
+After testing, run in production SQL Editor.
+
+</Step>
+</Steps>
+
+## Migration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Use IF EXISTS" icon="shield-check">
+    Use `CREATE TABLE IF NOT EXISTS` and `DROP TABLE IF EXISTS` for idempotency
+  </Card>
+  <Card title="Add Indexes" icon="gauge-high">
+    Create indexes for foreign keys and frequently queried columns
+  </Card>
+  <Card title="Include RLS Policies" icon="lock">
+    Always define security policies when creating new tables
+  </Card>
+  <Card title="Test Before Production" icon="flask">
+    Run migrations in development environment first
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Destructive Operations**: Be extremely careful with `DROP TABLE`, `DROP COLUMN`, or `ALTER COLUMN` that could lose data. Always backup production data first.
+</Warning>
+
+## Rollback Strategies
+
+<Tabs>
+  <Tab title="Column Addition">
+    
+    **Forward**:
+    ```sql
+    ALTER TABLE items ADD COLUMN new_field TEXT;
+    ```
+    
+    **Rollback**:
+    ```sql
+    ALTER TABLE items DROP COLUMN new_field;
+    ```
+    
+  </Tab>
+  
+  <Tab title="Data Migration">
+    
+    **Forward**:
+    ```sql
+    UPDATE items SET status = 'active' WHERE status IS NULL;
+    ```
+    
+    **Rollback**:
+    ```sql
+    -- Store original values before migration
+    CREATE TABLE items_backup AS SELECT * FROM items;
+    
+    -- Rollback
+    UPDATE items SET status = items_backup.status 
+    FROM items_backup WHERE items.id = items_backup.id;
+    ```
+    
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Migration fails with foreign key constraint error">
+    
+    **Error**: `violates foreign key constraint`
+    
+    **Solution**: Ensure related data exists before creating foreign keys:
+    
+    ```sql
+    -- Check for orphaned records first
+    SELECT * FROM order_items oi
+    LEFT JOIN orders o ON oi.order_id = o.id
+    WHERE o.id IS NULL;
+    
+    -- Clean up orphaned records
+    DELETE FROM order_items WHERE order_id NOT IN (SELECT id FROM orders);
+    ```
+    
+  </Accordion>
+
+  <Accordion title="Column already exists error">
+    
+    **Error**: `column "position" of relation "item_images" already exists`
+    
+    **Solution**: Use `ADD COLUMN IF NOT EXISTS`:
+    
+    ```sql
+    ALTER TABLE item_images ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;
+    ```
+    
+  </Accordion>
+
+  <Accordion title="Permission denied on table">
+    
+    **Error**: `permission denied for table items`
+    
+    **Solution**: Ensure you're running migrations with proper privileges:
+    
+    1. Use SQL Editor in Supabase dashboard (has full privileges)
+    2. Or use service role key in Supabase CLI
+    3. Check RLS policies aren't blocking migrations
+    
+  </Accordion>
+</AccordionGroup>
+
+## Production Migration Checklist
+
+- [ ] Migration tested in development environment
+- [ ] Backup of production database created
+- [ ] Migration script includes `IF EXISTS` / `IF NOT EXISTS`
+- [ ] RLS policies defined for new tables
+- [ ] Indexes created for foreign keys and frequent queries
+- [ ] Data validation queries prepared
+- [ ] Rollback plan documented
+- [ ] Team notified of scheduled migration
+- [ ] Migration executed during low-traffic period
+- [ ] Post-migration validation completed
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="Supabase SQL Editor" icon="database" href="https://supabase.com/docs/guides/database/overview">
+    Official guide for Supabase SQL Editor
+  </Card>
+  <Card title="PostgreSQL Documentation" icon="book" href="https://www.postgresql.org/docs/">
+    PostgreSQL ALTER TABLE and migration syntax
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Frontend Deployment" icon="browser" href="/deployment/frontend">
+    Deploy React client to Netlify
+  </Card>
+  <Card title="Backend Deployment" icon="server" href="/deployment/backend">
+    Deploy Express API server
+  </Card>
+</CardGroup>

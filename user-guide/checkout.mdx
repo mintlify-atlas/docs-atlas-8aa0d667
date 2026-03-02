@@ -1,0 +1,270 @@
+---
+title: 'Checkout Process'
+description: 'Complete your purchase with secure SumUp payment integration'
+---
+
+# Checkout Process
+
+Sabbels Handmade uses SumUp for secure payment processing. This guide walks you through completing your purchase.
+
+## Prerequisites
+
+Before checking out, ensure:
+- You have items in your cart
+- You are logged into your account
+- You have reviewed your cart items and quantities
+
+<Note>
+  You must be logged in to proceed to checkout. If you're not logged in, you'll see a login prompt in the cart.
+</Note>
+
+## Accessing Checkout
+
+From the shopping cart page:
+
+<Steps>
+  <Step title="Review your cart">
+    Verify all items, sizes, colors, and quantities are correct
+  </Step>
+  <Step title="Click checkout button">
+    Click the **"Proceed to Checkout"** button in the order summary sidebar
+  </Step>
+  <Step title="Checkout page loads">
+    You'll be redirected to `/checkout` to complete your order
+  </Step>
+</Steps>
+
+## Checkout Page Layout
+
+The checkout page is divided into two main sections:
+
+### Main Section (Left)
+**Payment Method Information**
+- SumUp payment provider details
+- Security badges
+- Pay button
+- Legal document links
+
+### Sidebar (Right)
+**Order Summary**
+- Cart items with thumbnails
+- Item details (size, color, hook type)
+- Quantities and prices
+- Order total
+- Security notice
+
+## Order Summary
+
+Before payment, review your order summary:
+
+### Item List
+
+Each item shows:
+- Product image thumbnail
+- Product name
+- Selected size (if applicable)
+- Selected color
+- Hook type (if customized)
+- Quantity
+- Total price for that line item
+
+### Total Amount
+
+The order total displays the final amount you'll be charged in euros (€).
+
+<Info>
+  All prices are displayed in euros (EUR) as Sabbels Handmade primarily serves European customers.
+</Info>
+
+## Payment with SumUp
+
+Sabbels Handmade uses SumUp as its payment provider for secure transactions.
+
+### Payment Flow
+
+<Steps>
+  <Step title="Initiate payment">
+    Click the **"Pay with SumUp"** button on the checkout page
+  </Step>
+  <Step title="Order creation">
+    The system creates an order in the database with:
+    - Your user ID
+    - Cart items and quantities
+    - Total amount
+    - Order status: "pending"
+  </Step>
+  <Step title="Redirect to SumUp">
+    A new browser tab opens to the SumUp payment page. You'll see a message: "Order created with ID: [order-id]"
+  </Step>
+  <Step title="Complete payment on SumUp">
+    On the SumUp page, enter your payment details:
+    - Credit/debit card information
+    - Billing address
+    - Any other required information
+  </Step>
+  <Step title="Return to store">
+    After completing payment on SumUp, you can close that tab and return to the Sabbels website
+  </Step>
+</Steps>
+
+<Note>
+  The SumUp payment page opens in a new tab, allowing you to keep the Sabbels site open in the background.
+</Note>
+
+## Security Features
+
+### Secure Payment
+
+Your payment is protected by:
+- **SSL Encryption**: All data transmitted is encrypted
+- **PCI Compliance**: SumUp is PCI-DSS compliant
+- **Secure Badge**: Look for the lock icon in security notices
+
+### Data Privacy
+
+- Sabbels never stores your credit card information
+- Payment details are handled entirely by SumUp
+- Only order information is stored in the Sabbels database
+
+<Info>
+  Click the security badges on the checkout page to learn more about data protection and FAQ.
+</Info>
+
+## Legal Documents
+
+At the bottom of the checkout page, you'll find links to:
+- Terms of Service
+- Privacy Policy  
+- Return Policy
+- Shipping Policy
+
+<Tip>
+  We recommend reviewing these documents before completing your purchase.
+</Tip>
+
+## Lead Time Information
+
+Before payment, you'll see a notice about production lead time:
+
+**Handmade Products Notice**
+> All items are handmade to order. Please allow additional time for production before shipping.
+
+This ensures you're aware that:
+- Products are crafted after you order
+- Delivery time includes production time
+- Each piece is made specifically for you
+
+## Payment States
+
+### Preparing Payment
+
+When you click "Pay with SumUp":
+- Button shows "Preparing..." state
+- Button is disabled during order creation
+- System communicates with the backend API
+
+### Order Created
+
+After successful order creation:
+- Success message displays with your order ID
+- SumUp payment page opens in new tab
+- Your cart is cleared
+
+### Payment Errors
+
+If an error occurs:
+- Error message appears in red below the payment button
+- Possible errors:
+  - "Payment error occurred" (API failure)
+  - Network connection issues
+  - Server errors
+- Your cart is NOT cleared so you can retry
+
+<Note>
+  If you encounter payment errors, try refreshing the page and attempting checkout again. Contact support if the problem persists.
+</Note>
+
+## After Payment
+
+### Successful Payment
+
+After completing payment on SumUp:
+1. You can return to the Sabbels site
+2. Your cart is cleared
+3. Order is created in the system
+4. You'll receive order confirmation (check your order history)
+
+### Viewing Your Order
+
+To verify your order was created:
+- Navigate to "My Orders" from your profile
+- Look for the order with the ID shown during checkout
+- See [Order Tracking](/user-guide/order-tracking) for details
+
+## Empty Cart Checkout
+
+If you access the checkout page with an empty cart:
+- You'll see "Your cart is empty" message
+- A button to return to the product catalog
+- Checkout functionality is not available
+
+## Return to Cart
+
+To modify your order before payment:
+1. Click the back arrow at the top of the checkout page
+2. You'll return to the cart page
+3. Make changes to items or quantities
+4. Click "Proceed to Checkout" again when ready
+
+## API Integration
+
+The checkout process communicates with the backend API:
+
+### Request
+- **Endpoint**: `POST /api/checkout`
+- **Authentication**: Requires valid session token
+- **Payload**: Cart items, customer email, currency
+
+### Response
+- **Success**: Order ID returned
+- **Failure**: Error message displayed
+
+<Info>
+  The API URL is automatically determined from your environment configuration.
+</Info>
+
+## Mobile Experience
+
+On mobile devices:
+- Checkout layout stacks vertically
+- Order summary appears below payment section
+- All functionality remains identical
+- SumUp payment page is mobile-optimized
+- Easy tap targets for buttons and links
+
+## Troubleshooting
+
+### Payment Button Disabled
+
+The pay button may be disabled if:
+- Order is currently being created ("Preparing..." state)
+- No items in cart
+- Not logged in
+
+### SumUp Page Doesn't Open
+
+If the SumUp tab doesn't open:
+- Check your browser's popup blocker settings
+- Allow popups for the Sabbels domain
+- Try clicking the payment button again
+
+### Order Created But Payment Not Completed
+
+If you created an order but didn't complete payment:
+- The order exists with "pending" status
+- You can see it in your order history
+- Contact support to cancel or complete the order
+
+<Tip>
+  Keep the order ID shown after clicking "Pay with SumUp" for reference if you need to contact support.
+</Tip>

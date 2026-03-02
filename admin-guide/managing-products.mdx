@@ -1,0 +1,181 @@
+---
+title: Managing Products
+description: Complete guide to creating, editing, and managing products with the multi-step wizard
+---
+
+The Product Manager provides a streamlined workflow for managing your product catalog through a 4-step wizard interface.
+
+## Product List View
+
+The main product grid displays all products with key information at a glance.
+
+### Search and Filter
+
+**Search Field:** Filter products by name or ID
+
+```jsx
+// client/src/components/Admin/ProductManager.jsx:463
+<input
+  type="search"
+  placeholder={t("admin.products.search")}
+  value={searchQuery}
+  onChange={e => setSearchQuery(e.target.value)}
+/>
+```
+
+### Product Card Information
+
+Each product card shows:
+- **Primary image** (or camera icon if no image)
+- **Product name**
+- **Category** and variant count
+- **Price** (minimum variant price)
+- **Status indicator** (active, draft, or archived)
+- **Thumbnail gallery** (first 4 images)
+
+<Info>
+The price displayed is automatically calculated as the minimum price across all variants.
+</Info>
+
+## Creating a New Product
+
+<Steps>
+  <Step title="Open the Wizard">
+    Click "New Product" button to launch the 4-step creation wizard.
+    
+    The wizard includes: Info → Variants → Images → Review
+  </Step>
+  
+  <Step title="Product Information">
+    Enter basic product details (see Product Information section below)
+  </Step>
+  
+  <Step title="Configure Variants">
+    Set up sizes, prices, and stock levels (see Product Variants guide)
+  </Step>
+  
+  <Step title="Upload Images">
+    Add product photos with drag-and-drop reordering
+  </Step>
+  
+  <Step title="Review and Submit">
+    Verify all details and save the product
+  </Step>
+</Steps>
+
+## Step 1: Product Information
+
+### Required Fields
+
+**Product Name** (`name`) - *Required*
+- Maximum user-facing identifier
+- Sanitized using `sanitizeText()` before save
+- Located: `InfoStep.jsx:21`
+
+### Optional Fields
+
+**Description** (`description`)
+- Supports Markdown formatting
+- Live preview toggle available
+- Rendered with ReactMarkdown on frontend
+- Located: `InfoStep.jsx:93`
+
+**Category** (`category_id`)
+- Select from hierarchical category tree
+- Parent categories and subcategories shown in optgroups
+- Can be null (uncategorized)
+
+**Status** (`status`)
+- Options: `active`, `draft`, `archived`
+- Default: `active`
+- Affects product visibility on storefront
+
+<Note>
+Markdown in descriptions allows for rich formatting: **bold**, *italic*, lists, and links.
+</Note>
+
+## Editing Products
+
+Click "Edit" on any product card to:
+1. Load existing product data into the wizard
+2. Fetch all associated variants via `fetchVariantsByItem()`
+3. Load existing images with current ordering
+
+**Edit Mode Differences:**
+- Wizard title shows "Edit Product"
+- Submit button shows "Update" instead of "Create"
+- Existing images can be reordered or deleted
+- Variants can be added, modified, or removed
+
+## Deleting Products
+
+<Warning>
+Deleting a product is permanent and will remove all associated variants and images.
+</Warning>
+
+<Steps>
+  <Step title="Click Delete Button">
+    Click the trash icon on a product card
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm the deletion in the browser dialog
+  </Step>
+  
+  <Step title="Cascade Delete">
+    Product, variants, and image records are removed
+    
+    Storage images are deleted from Supabase Storage
+  </Step>
+</Steps>
+
+**Implementation:** `ProductManager.jsx:248`
+
+## Image Management
+
+Images are stored in Supabase Storage under the `product-images` bucket.
+
+### Upload Process
+
+1. Files uploaded with naming: `{timestamp}-{filename}`
+2. Stored at path: `{itemId}/{fileName}`
+3. Position tracked in `item_images` table
+4. Public URL generated and stored
+
+**Upload Function:** `ProductManager.jsx:109`
+
+### Image Deletion
+
+Deleting images involves:
+1. Removing from storage bucket
+2. Deleting database record from `item_images`
+3. Updating primary image index if needed
+4. Refreshing product list
+
+## Form Validation
+
+Products are validated before submission:
+
+```javascript
+// ProductManager.jsx:143
+const trimmedName = sanitizeText(form.name);
+if (!trimmedName) {
+  pushToast({ message: t("admin.products.messages.nameRequired"), variant: "error" });
+  return;
+}
+```
+
+**Variant Validation:**
+- Must have at least one valid variant
+- Price must be positive number
+- Stock must be non-negative integer
+- Size must be non-empty string
+
+## Empty States
+
+When no products exist:
+- Package icon displayed
+- "Create your first product" message
+- CTA button to open wizard
+
+**Implementation:** `ProductManager.jsx:548`

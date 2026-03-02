@@ -1,0 +1,341 @@
+---
+title: "Payment Processing"
+description: "Stripe integration with webhooks for secure payment handling"
+---
+
+## Overview
+
+Sabbels Handmade uses Stripe for secure payment processing with a complete checkout flow including payment intents, webhooks, and automatic order status management. The system supports multiple currencies and handles the full payment lifecycle from checkout to confirmation.
+
+## Payment Flow
+
+The checkout process follows this sequence:
+
+1. **Cart Validation**: Verify all items have variants and sufficient stock
+2. **Order Creation**: Create order with `pending` status in database
+3. **Payment Intent**: Generate Stripe Payment Intent with order metadata
+4. **Client Checkout**: Customer completes payment on frontend
+5. **Webhook Handling**: Stripe notifies backend of payment status
+6. **Order Update**: Order status updated based on payment result
+7. **Email Notification**: Shop owner receives order confirmation
+
+<Info>
+  The system uses Stripe's automatic payment methods, which supports cards, digital wallets, and local payment methods based on the customer's location.
+</Info>
+
+## Checkout Endpoint
+
+The `/api/checkout` endpoint creates orders and payment intents:
+
+<CodeGroup>
+
+```javascript server.js:207
+app.post('/api/checkout', async (req, res) => {
+  try {
+    // 1. Authenticate user
+    const user = await getUserFromAuthHeader(req.headers.authorization);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const currency = (req.body.currency || 'eur').toLowerCase();
+    const cartItems = normalizeCartItems(req.body.cartItems);
+    
+    if (!cartItems.length) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+
+    // 2. Validate all items have variants
+    if (cartItems.some(ci => !ci.variant_id)) {
+      return res.status(400).json({ 
+        error: 'Chaque article doit inclure un variant_id.' 
+      });
+    }
+
+    // 3. Calculate total and validate stock
+    const { totalCents: amount, variantsById } = await gatherCartPricing(cartItems);
+    
+    for (const item of cartItems) {
+      const variant = variantsById.get(item.variant_id);
+      if (variant.stock != null && variant.stock < item.quantity) {
+        return res.status(400).json({ 
+          error: 'Stock insuffisant pour un des variants' 
+        });
+      }
+    }
+
+    // 4. Create order in pending state
+    const { data: order } = await supabase
+      .from('orders')
+      .insert({ user_id: user.id, status: 'pending', total: amount / 100 })
+      .select('id')
+      .single();
+
+    // 5. Create order items
+    const orderItemsPayload = cartItems.map(ci => ({
+      order_id: order.id,
+      item_id: ci.item_id,
+      quantity: ci.quantity,
+      variant_id: ci.variant_id,
+      unit_price: variantsById.get(ci.variant_id)?.price ?? 0,
+      customization: ci.customization || {},
+    }));
+    await supabase.from('order_items').insert(orderItemsPayload);
+
+    // 6. Create Stripe Payment Intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency,
+      automatic_payment_methods: { enabled: true },
+      metadata: {
+        user_id: user.id,
+        order_id: order.id,
+      },
+    });
+
+    // 7. Store payment intent ID on order
+    await supabase
+      .from('orders')
+      .update({ payment_intent_id: paymentIntent.id })
+      .eq('id', order.id);
+
+    return res.status(200).json({ 
+      clientSecret: paymentIntent.client_secret, 
+      orderId: order.id 
+    });
+  } catch (err) {
+    console.error('Checkout error:', err);
+    return res.status(500).json({ error: 'Checkout failed' });
+  }
+});
+```
+
+</CodeGroup>
+
+## Cart Pricing
+
+The pricing system fetches item and variant data to calculate accurate totals:
+
+```javascript server.js:166
+async function gatherCartPricing(cartItems) {
+  const itemIds = [...new Set(cartItems.map(i => i.item_id))];
+  const variantIds = [...new Set(cartItems.map(i => i.variant_id).filter(Boolean))];
+
+  // Fetch base item prices
+  const { data: items } = await supabase
+    .from('items')
+    .select('id, price')
+    .in('id', itemIds);
+  const itemMap = new Map(items.map(i => [i.id, Number(i.price)]));
+
+  // Fetch variant prices and stock
+  const { data: variants } = await supabase
+    .from('item_variants')
+    .select('id, item_id, price, stock')
+    .in('id', variantIds);
+  const variantMap = new Map(
+    variants.map(v => [v.id, { 
+      item_id: v.item_id, 
+      price: Number(v.price), 
+      stock: v.stock ?? 0 
+    }])
+  );
+
+  // Calculate total (variants override base item price)
+  const total = cartItems.reduce((sum, it) => {
+    const basePrice = itemMap.get(it.item_id) || 0;
+    const variant = it.variant_id ? variantMap.get(it.variant_id) : null;
+    const price = variant ? variant.price : basePrice;
+    return sum + price * it.quantity;
+  }, 0);
+
+  return {
+    totalCents: Math.max(0, Math.round(total * 100)),
+    itemsById: itemMap,
+    variantsById: variantMap,
+  };
+}
+```
+
+## Stripe Webhooks
+
+Webhooks handle payment lifecycle events and update order status accordingly. The webhook endpoint requires raw body parsing for signature verification.
+
+### Webhook Endpoint
+
+<CodeGroup>
+
+```javascript server.js:38
+app.post('/api/stripe/webhook', 
+  express.raw({ type: 'application/json' }), 
+  async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+    
+    try {
+      // Verify webhook signature
+      event = stripe.webhooks.constructEvent(
+        req.body, 
+        sig, 
+        STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error('Webhook signature verification failed.', err.message);
+      return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+    }
+
+    try {
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          await handlePaymentSuccess(event.data.object);
+          break;
+        case 'payment_intent.payment_failed':
+          await handlePaymentFailed(event.data.object);
+          break;
+        case 'payment_intent.canceled':
+          await handlePaymentCanceled(event.data.object);
+          break;
+        default:
+          console.log(`Unhandled event type: ${event.type}`);
+      }
+    } catch (err) {
+      console.error('Webhook handling error:', err);
+      return res.status(500).json({ error: 'Internal webhook error' });
+    }
+
+    res.json({ received: true });
+  }
+);
+```
+
+</CodeGroup>
+
+### Event Handlers
+
+<Tabs>
+  <Tab title="Payment Succeeded">
+    ```javascript server.js:52
+    case 'payment_intent.succeeded': {
+      const pi = event.data.object;
+      const orderId = pi.metadata?.order_id;
+      console.log(`Payment succeeded for order: ${orderId}`);
+      
+      if (orderId) {
+        // Update order status
+        await supabase
+          .from('orders')
+          .update({ status: 'paid' })
+          .eq('id', orderId);
+        
+        console.log(`Order ${orderId} marked as paid`);
+        
+        // Send confirmation email to shop owner
+        await sendOrderRecapEmail(orderId);
+      }
+      break;
+    }
+    ```
+  </Tab>
+  <Tab title="Payment Failed">
+    ```javascript server.js:80
+    case 'payment_intent.payment_failed': {
+      const pi = event.data.object;
+      const orderId = pi.metadata?.order_id;
+      
+      if (orderId) {
+        await supabase
+          .from('orders')
+          .update({ status: 'failed' })
+          .eq('id', orderId);
+      }
+      break;
+    }
+    ```
+  </Tab>
+  <Tab title="Payment Canceled">
+    ```javascript server.js:90
+    case 'payment_intent.canceled': {
+      const pi = event.data.object;
+      const orderId = pi.metadata?.order_id;
+      
+      if (orderId) {
+        await supabase
+          .from('orders')
+          .update({ status: 'canceled' })
+          .eq('id', orderId);
+      }
+      break;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Order Status Lifecycle
+
+Orders progress through the following states:
+
+| Status | Description | Set By |
+|--------|-------------|--------|
+| `pending` | Order created, payment not completed | Checkout endpoint |
+| `paid` | Payment successful | Webhook (payment succeeded) |
+| `failed` | Payment failed | Webhook (payment failed) |
+| `canceled` | Payment canceled by customer | Webhook (payment canceled) |
+| `shipped` | Order fulfilled and shipped | Admin (manual) |
+| `refunded` | Payment refunded | Admin (manual) |
+
+<Note>
+  Pending orders older than 24 hours are automatically cleaned up to remove abandoned checkout attempts. This runs every 6 hours via a background job.
+</Note>
+
+## Email Notifications
+
+When a payment succeeds, the shop owner receives an automated email with order details using Resend:
+
+```javascript server.js:289
+async function sendOrderRecapEmail(orderId) {
+  // Fetch order with items and customer info
+  const { data: order } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .single();
+
+  const { data: orderItems } = await supabase
+    .from('order_items')
+    .select(`
+      *,
+      items:item_id (name),
+      variants:variant_id (size, color_id, colors:color_id (name))
+    `)
+    .eq('order_id', orderId);
+
+  const { data: customer } = await supabase
+    .from('users')
+    .select('email, full_name')
+    .eq('id', order.user_id)
+    .single();
+
+  // Send formatted HTML email via Resend
+  await resend.emails.send({
+    from: 'Sabbels Handmade <onboarding@resend.dev>',
+    to: 'sabbelshandmade@gmail.com',
+    subject: `🧶 Nouvelle commande #${orderId} - ${order.total} €`,
+    html: emailHtml,
+  });
+}
+```
+
+## Configuration
+
+Required environment variables for payment processing:
+
+```bash
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Email Configuration
+RESEND_API_KEY=re_...
+```
+
+<Info>
+  Test the webhook locally using the Stripe CLI: `stripe listen --forward-to localhost:3000/api/stripe/webhook`
+</Info>

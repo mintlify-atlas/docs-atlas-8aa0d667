@@ -1,0 +1,140 @@
+---
+title: 'API Overview'
+description: 'Backend API for Sabbels Handmade e-commerce platform'
+---
+
+## Base URL
+
+The Sabbels Handmade API is hosted at:
+
+```
+https://your-api-domain.com
+```
+
+All API endpoints are prefixed with `/api`.
+
+## Authentication
+
+Most endpoints require authentication using Supabase Auth. Include the user's access token in the `Authorization` header:
+
+```bash
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+The API validates tokens by calling Supabase's `auth.getUser()` method. Invalid or missing tokens will result in a `401 Unauthorized` response.
+
+### Endpoints Requiring Authentication
+
+- `POST /api/checkout` - Requires valid user authentication
+
+### Public Endpoints
+
+- `POST /api/contact` - No authentication required
+- `POST /api/stripe/webhook` - Webhook endpoint (validates Stripe signature)
+- `GET /api/health` - Health check endpoint
+
+## CORS Configuration
+
+The API uses CORS to control cross-origin access. By default, the following origins are allowed:
+
+- `https://sabbelshandmade.netlify.app` (production)
+- `http://localhost:5173` (development)
+- `http://localhost:3000` (development)
+- Additional origins from `CLIENT_ORIGIN` environment variable
+
+### CORS Behavior
+
+<Note>
+In development mode (`NODE_ENV !== 'production'`), all origins are allowed. In production, only whitelisted origins can access the API.
+</Note>
+
+Requests without an origin header (e.g., mobile apps, curl, Postman) are always allowed.
+
+### CORS Settings
+
+```javascript
+cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true)
+    }
+    // Development: allow all
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true)
+    }
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true
+})
+```
+
+## Error Handling
+
+The API returns standard HTTP status codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| `200` | Success |
+| `400` | Bad Request - Invalid parameters or validation errors |
+| `401` | Unauthorized - Missing or invalid authentication token |
+| `500` | Internal Server Error - Server-side error |
+
+### Error Response Format
+
+All errors return a JSON object with an `error` field:
+
+```json
+{
+  "error": "Error description message"
+}
+```
+
+## Rate Limiting
+
+<Warning>
+Currently, the API does not implement rate limiting. It's recommended to implement this in production environments.
+</Warning>
+
+## Request Format
+
+All POST requests should use `application/json` content type, except:
+
+- `POST /api/stripe/webhook` - Expects raw body (`application/json`)
+- `POST /api/contact` - Accepts `multipart/form-data` for file uploads
+
+## Response Format
+
+All successful responses return JSON objects with relevant data fields.
+
+## Environment Variables
+
+The API requires the following environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `PORT` | Server port (default: 3000) | No |
+| `CLIENT_ORIGIN` | Comma-separated allowed origins | No |
+| `STRIPE_SECRET_KEY` | Stripe API secret key | Yes |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | Yes |
+| `SUPABASE_URL` | Supabase project URL | Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes |
+| `RESEND_API_KEY` | Resend email API key | No |
+| `NODE_ENV` | Environment (production/development) | No |
+
+## Health Check
+
+Verify the API is running:
+
+```bash
+curl https://your-api-domain.com/api/health
+```
+
+**Response:**
+
+```json
+{
+  "ok": true
+}
+```

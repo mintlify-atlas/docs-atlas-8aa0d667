@@ -1,0 +1,144 @@
+---
+title: Introduction
+description: Welcome to Sabbels Handmade E-Commerce - a full-stack e-commerce platform for handmade products
+---
+
+# Welcome to Sabbels Handmade E-Commerce
+
+Sabbels Handmade is a modern, full-stack e-commerce platform designed specifically for selling handmade, artisanal products. Built with React 19, Supabase, and Stripe, it provides a complete solution for both customers and shop administrators.
+
+## What is Sabbels Handmade?
+
+Sabbels Handmade is a B2C e-commerce platform that enables you to:
+
+- **Showcase handmade products** with rich media, multiple variants, and detailed descriptions
+- **Manage inventory** with size-based variants, stock tracking, and SKU management
+- **Process payments** securely through Stripe with automated order management
+- **Serve global customers** with built-in internationalization (German and French)
+- **Control everything** through a powerful admin dashboard
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Product Catalog" icon="boxes-stacked" href="/features/product-catalog">
+    Rich product catalog with categories, colors, variants, and multiple images per product
+  </Card>
+  <Card title="Shopping Cart" icon="cart-shopping" href="/user-guide/shopping-cart">
+    Persistent shopping cart with local storage, quantity management, and variant selection
+  </Card>
+  <Card title="Secure Payments" icon="credit-card" href="/features/payment-processing">
+    Stripe-powered checkout with webhook integration for automated order processing
+  </Card>
+  <Card title="Admin Dashboard" icon="gauge" href="/admin-guide/dashboard">
+    Comprehensive admin panel for managing products, orders, customers, and inventory
+  </Card>
+  <Card title="Authentication" icon="shield-halved" href="/features/authentication">
+    Supabase Auth with role-based access control (client/admin) and Row Level Security
+  </Card>
+  <Card title="Internationalization" icon="globe" href="/features/internationalization">
+    Multi-language support with German and French translations built-in
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+Sabbels Handmade is built with modern, production-ready technologies:
+
+### Frontend
+- **React 19** with Vite 7 for fast development and optimized builds
+- **React Router 7** for client-side routing
+- **i18next** for internationalization
+- **Stripe.js** for secure payment processing
+- Custom CSS with CSS variables for theming
+
+### Backend
+- **Express 4** for the API server
+- **Node.js** runtime
+- **Stripe SDK** for payment processing and webhooks
+- **Resend** for transactional emails
+- **Multer** for file uploads
+
+### Database
+- **Supabase** (PostgreSQL) with Row Level Security policies
+- **Supabase Storage** for product images
+- Comprehensive schema with triggers and constraints
+
+### Deployment
+- **Netlify** for frontend hosting
+- **Railway/Render/Fly.io** options for API hosting
+- **Supabase** cloud for database and storage
+
+## Architecture Overview
+
+```
+┌────────────────────────────────────────────────────────┐
+│                     FRONTEND                           │
+│   React 19 · Vite 7 · React Router 7 · i18next         │
+│   Hosted on Netlify                                    │
+└────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌────────────────────────────────────────────────────────┐
+│                        API                             │
+│   Express 4 · Node.js · Stripe SDK                     │
+└────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌────────────────────────────────────────────────────────┐
+│                   DATABASE                             │
+│   Supabase (PostgreSQL) · Row Level Security           │
+└────────────────────────────────────────────────────────┘
+```
+
+## Project Structure
+
+The repository is organized into three main directories:
+
+- **`client/`** - React frontend application with all UI components, pages, and user-facing features
+- **`api/`** - Express backend server handling Stripe payments, webhooks, and email notifications
+- **`Database/`** - SQL schema files, RLS policies, seed data, and migration scripts
+
+## Who is This For?
+
+Sabbels Handmade is ideal for:
+
+- **Artisans and crafters** selling handmade products online
+- **Small businesses** needing a professional e-commerce solution
+- **Developers** looking for a reference implementation of a modern full-stack app
+- **Teams** wanting a customizable platform they can extend and modify
+
+## Next Steps
+
+Ready to get started? Here's what to do next:
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running quickly with a basic setup
+  </Card>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Complete installation instructions for all components
+  </Card>
+  <Card title="User Guide" icon="book" href="/user-guide/browsing-products">
+    Learn how customers use the platform
+  </Card>
+  <Card title="Admin Guide" icon="user-gear" href="/admin-guide/dashboard">
+    Discover admin features for managing your store
+  </Card>
+</CardGroup>
+
+## Support and Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/aluxey/E-Commerce">
+    View source code and contribute
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the backend API documentation
+  </Card>
+  <Card title="Database Schema" icon="database" href="/database/schema">
+    Understand the data model
+  </Card>
+  <Card title="Setup & Deploy" icon="rocket" href="/setup/supabase">
+    Configure and deploy your instance
+  </Card>
+</CardGroup>

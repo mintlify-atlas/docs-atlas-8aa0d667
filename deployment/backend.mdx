@@ -1,0 +1,392 @@
+---
+title: 'Deploy Backend API'
+description: 'Deploy the Express API server for Stripe webhooks and email services'
+---
+
+The backend API is a Node.js Express server that handles Stripe webhooks, payment processing, and email notifications.
+
+## Overview
+
+The API server (`api/src/server.js`) provides:
+- **Stripe webhook handling** for payment confirmations
+- **Payment intent creation** for checkout
+- **Email notifications** via Resend or Nodemailer
+- **Image upload** with Multer
+- **Supabase integration** with service role key
+
+## Prerequisites
+
+<Info>
+  - Node.js 18+ hosting platform (Railway, Render, Fly.io, or VPS)
+  - Environment variables from Stripe and Supabase
+  - Domain or public URL for webhooks
+</Info>
+
+## Deployment Options
+
+<CardGroup cols={3}>
+  <Card title="Railway" icon="train">
+    Easy deployment with automatic HTTPS
+  </Card>
+  <Card title="Render" icon="cloud">
+    Free tier available for testing
+  </Card>
+  <Card title="Fly.io" icon="plane">
+    Global edge deployment
+  </Card>
+</CardGroup>
+
+## Environment Variables
+
+<Steps>
+<Step title="Configure Required Variables">
+
+Set these environment variables in your hosting platform:
+
+```bash .env
+# Server
+PORT=3000
+CLIENT_ORIGIN=https://your-frontend.netlify.app
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+
+# Email (Resend)
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=noreply@yourdomain.com
+RESEND_TO_EMAIL=contact@yourdomain.com
+
+# Email (Alternative: Nodemailer)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_FROM=noreply@yourdomain.com
+```
+
+<Warning>
+  Use **production keys** for `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Test keys start with `sk_test_`.
+</Warning>
+
+</Step>
+
+<Step title="Set CORS Origins">
+
+The `CLIENT_ORIGIN` variable accepts comma-separated URLs:
+
+```bash
+CLIENT_ORIGIN=https://yourdomain.com,https://preview.yourdomain.com
+```
+
+This allows multiple frontend deployments (production + preview branches).
+
+</Step>
+</Steps>
+
+## Deployment Steps
+
+<Tabs>
+  <Tab title="Railway">
+    
+    <Steps>
+      <Step title="Install Railway CLI">
+        
+        ```bash
+        npm install -g @railway/cli
+        railway login
+        ```
+        
+      </Step>
+      
+      <Step title="Initialize Project">
+        
+        ```bash
+        cd api
+        railway init
+        ```
+        
+        Select **"Create new project"**.
+        
+      </Step>
+      
+      <Step title="Add Environment Variables">
+        
+        ```bash
+        railway variables set STRIPE_SECRET_KEY=sk_live_...
+        railway variables set SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+        # ... add all other variables
+        ```
+        
+      </Step>
+      
+      <Step title="Deploy">
+        
+        ```bash
+        railway up
+        ```
+        
+        Railway will:
+        1. Build the application
+        2. Run `npm start` (uses `node src/server.js`)
+        3. Provide a public URL
+        
+      </Step>
+    </Steps>
+    
+  </Tab>
+  
+  <Tab title="Render">
+    
+    <Steps>
+      <Step title="Create Web Service">
+        
+        1. Go to [Render Dashboard](https://dashboard.render.com)
+        2. Click **New → Web Service**
+        3. Connect your Git repository
+        
+      </Step>
+      
+      <Step title="Configure Build Settings">
+        
+        - **Root Directory**: `api`
+        - **Build Command**: `npm install`
+        - **Start Command**: `npm start`
+        - **Environment**: Node
+        
+      </Step>
+      
+      <Step title="Add Environment Variables">
+        
+        In the Render dashboard, navigate to **Environment** and add all variables from the `.env` example above.
+        
+      </Step>
+      
+      <Step title="Deploy">
+        
+        Click **Create Web Service**. Render will automatically deploy on every push to your main branch.
+        
+      </Step>
+    </Steps>
+    
+  </Tab>
+  
+  <Tab title="Docker">
+    
+    Create a `Dockerfile` in the `api/` directory:
+    
+    ```dockerfile Dockerfile
+    FROM node:20-alpine
+    
+    WORKDIR /app
+    
+    COPY package*.json ./
+    RUN npm ci --only=production
+    
+    COPY . .
+    
+    EXPOSE 3000
+    
+    CMD ["node", "src/server.js"]
+    ```
+    
+    Build and run:
+    
+    ```bash
+    docker build -t sabbels-api .
+    docker run -p 3000:3000 --env-file .env sabbels-api
+    ```
+    
+  </Tab>
+</Tabs>
+
+## Package Configuration
+
+The `api/package.json` defines startup scripts:
+
+```json package.json
+{
+  "name": "api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.51.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.6",
+    "resend": "^6.6.0",
+    "stripe": "^16.7.0"
+  }
+}
+```
+
+| Script | Usage |
+|--------|-------|
+| `npm run dev` | Development with hot-reload and `.env` file |
+| `npm start` | Production mode (reads env vars from platform) |
+
+## Configure Stripe Webhook
+
+<Steps>
+<Step title="Get Deployment URL">
+
+After deployment, note your API URL:
+```
+https://your-api.railway.app
+```
+
+</Step>
+
+<Step title="Create Webhook in Stripe">
+
+1. Go to [Stripe Dashboard → Webhooks](https://dashboard.stripe.com/webhooks)
+2. Click **Add endpoint**
+3. Set endpoint URL: `https://your-api.railway.app/webhook`
+4. Select events:
+   - `payment_intent.succeeded`
+   - `payment_intent.payment_failed`
+   - `charge.refunded`
+
+</Step>
+
+<Step title="Copy Webhook Secret">
+
+After creating the webhook, Stripe provides a signing secret:
+
+```
+whsec_abc123...
+```
+
+Add this to your environment variables as `STRIPE_WEBHOOK_SECRET`.
+
+</Step>
+
+<Step title="Test Webhook">
+
+Use Stripe CLI to test locally:
+
+```bash
+stripe listen --forward-to https://your-api.railway.app/webhook
+stripe trigger payment_intent.succeeded
+```
+
+</Step>
+</Steps>
+
+## Health Check
+
+Verify the API is running:
+
+```bash
+curl https://your-api.railway.app/health
+```
+
+Expected response:
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-03-02T23:30:00.000Z"
+}
+```
+
+## Monitoring and Logs
+
+<CodeGroup>
+
+```bash Railway
+# View logs
+railway logs
+
+# Follow logs in real-time
+railway logs --follow
+```
+
+```bash Render
+# Logs available in dashboard
+# Navigate to: Logs tab in your service
+```
+
+```bash Docker
+# View container logs
+docker logs sabbels-api
+
+# Follow logs
+docker logs -f sabbels-api
+```
+
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Webhook signature verification fails">
+    
+    **Error**: `Webhook signature verification failed`
+    
+    **Solutions**:
+    1. Verify `STRIPE_WEBHOOK_SECRET` matches the secret from Stripe dashboard
+    2. Ensure webhook endpoint URL is correct
+    3. Check that raw body is preserved (Express raw body parser)
+    
+  </Accordion>
+
+  <Accordion title="CORS errors from frontend">
+    
+    **Error**: `Access-Control-Allow-Origin` header missing
+    
+    **Solution**: Add frontend URL to `CLIENT_ORIGIN`:
+    
+    ```bash
+    CLIENT_ORIGIN=https://your-frontend.netlify.app,https://deploy-preview-*.netlify.app
+    ```
+    
+  </Accordion>
+
+  <Accordion title="Email sending fails">
+    
+    **Resend**: Verify `RESEND_API_KEY` and that sending domain is verified
+    
+    **Nodemailer**: For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password
+    
+  </Accordion>
+
+  <Accordion title="Supabase connection errors">
+    
+    **Error**: `Invalid API key`
+    
+    **Solution**: Ensure you're using the **service role key**, not the anon key. The service role key has full database access.
+    
+  </Accordion>
+</AccordionGroup>
+
+## Production Checklist
+
+- [ ] All environment variables set with production values
+- [ ] `STRIPE_SECRET_KEY` is live mode (starts with `sk_live_`)
+- [ ] `STRIPE_WEBHOOK_SECRET` configured and tested
+- [ ] `CLIENT_ORIGIN` includes production frontend URL
+- [ ] Webhook endpoint registered in Stripe dashboard
+- [ ] Email service configured (Resend or Nodemailer)
+- [ ] Health check endpoint returns 200
+- [ ] Logs show no startup errors
+- [ ] Test payment flow end-to-end
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Frontend Deployment" icon="browser" href="/deployment/frontend">
+    Connect the frontend to your deployed API
+  </Card>
+  <Card title="Database Migrations" icon="database" href="/deployment/database-migrations">
+    Set up and run production database migrations
+  </Card>
+</CardGroup>

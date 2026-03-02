@@ -1,0 +1,377 @@
+---
+title: Email Configuration
+description: Set up Resend for transactional emails and order notifications
+---
+
+This guide covers configuring email notifications using Resend for order confirmations and contact form submissions.
+
+## Why Resend?
+
+The application uses [Resend](https://resend.com) for transactional emails because:
+
+- Simple API with excellent developer experience
+- Generous free tier (100 emails/day, 3,000/month)
+- Custom domain support
+- React Email component support
+- Detailed delivery analytics
+
+## Create Resend Account
+
+<Steps>
+  <Step title="Sign Up">
+    1. Go to [resend.com](https://resend.com)
+    2. Click **Start Building**
+    3. Sign up with GitHub or email
+    4. Verify your email address
+  </Step>
+
+  <Step title="Get API Key">
+    1. After login, go to **API Keys**
+    2. Click **Create API Key**
+    3. Configure the key:
+       - **Name**: `sabbels-handmade-production` (or similar)
+       - **Permission**: Full Access (or Send-only for production)
+       - **Domain**: Select your domain (or "All Domains")
+    4. Click **Create**
+    5. Copy the API key (starts with `re_`)
+    
+    <Warning>
+      Copy the API key immediately! It's only shown once. Store it securely in your environment variables.
+    </Warning>
+  </Step>
+</Steps>
+
+## Configure Email Domain (Optional)
+
+For production, use a custom domain for better deliverability.
+
+<Steps>
+  <Step title="Add Domain">
+    1. In Resend dashboard, go to **Domains**
+    2. Click **Add Domain**
+    3. Enter your domain (e.g., `sabbelshandmade.com`)
+    4. Click **Add**
+  </Step>
+
+  <Step title="Configure DNS Records">
+    Resend provides DNS records to add:
+    1. Add the provided **SPF**, **DKIM**, and **DMARC** records to your DNS
+    2. Wait for DNS propagation (up to 48 hours, usually faster)
+    3. Click **Verify DNS Records** in Resend dashboard
+    
+    <Note>
+      Until verified, you can use `onboarding@resend.dev` as the sender address for testing.
+    </Note>
+  </Step>
+
+  <Step title="Update Sender Address">
+    Once verified, update the sender in your code:
+    
+    ```javascript
+    // From:
+    from: 'Sabbels Handmade <onboarding@resend.dev>'
+    
+    // To:
+    from: 'Sabbels Handmade <orders@sabbelshandmade.com>'
+    ```
+    
+    **Code reference**: `/api/src/server.js:417`
+  </Step>
+</Steps>
+
+## Email Types
+
+The application sends two types of emails:
+
+### 1. Order Confirmation
+
+Sent when a payment succeeds.
+
+**Trigger**: Stripe webhook `payment_intent.succeeded`
+
+**Recipient**: Shop owner (`sabbelshandmade@gmail.com`)
+
+**Contains**:
+- Order number and date
+- Customer name and email
+- Ordered items with sizes, colors, quantities
+- Total amount
+- Payment status
+
+**Code reference**: `/api/src/server.js:289-428`
+
+**Template preview**:
+```html
+┌─────────────────────────────────────────┐
+│   Nouvelle Commande!                    │
+│   Sabbels Handmade                      │
+├─────────────────────────────────────────┤
+│ Commande #abc-123                       │
+│                                         │
+│ Date: 2 mars 2026, 14:30               │
+│ Client: Jean Dupont                     │
+│ Email: jean@example.com                 │
+│ Statut: Payée ✓                        │
+│                                         │
+│ Articles commandés                      │
+│ ┌─────────┬───────┬────────┬────┬─────┐│
+│ │ Produit │ Taille│ Couleur│ Qté│ Prix││
+│ ├─────────┼───────┼────────┼────┼─────┤│
+│ │ Bonnet  │ M     │ Bleu   │ 1  │35.00││
+│ └─────────┴───────┴────────┴────┴─────┘│
+│                                         │
+│ Total: 35.00 €                         │
+└─────────────────────────────────────────┘
+```
+
+### 2. Contact Form
+
+Sent when a customer submits the contact form.
+
+**Trigger**: POST to `/api/contact`
+
+**Recipient**: Shop owner (`sabbelshandmade@gmail.com`)
+
+**Contains**:
+- Customer name and email (with Reply-To)
+- Subject line
+- Message content
+- Optional file attachment (up to 10MB)
+- Timestamp
+
+**Code reference**: `/api/src/server.js:434-535`
+
+## Email Configuration
+
+Set these environment variables:
+
+### API Server (.env)
+
+```bash
+# Resend API Key
+RESEND_API_KEY=re_your_api_key_here
+```
+
+**Recipient email** is hardcoded:
+
+**Code reference**: `/api/src/server.js:16-17`
+
+```javascript
+const EMAIL_TO = 'sabbelshandmade@gmail.com'
+```
+
+<Note>
+  To change the recipient email, update the `EMAIL_TO` constant in `/api/src/server.js`.
+</Note>
+
+## Email Features
+
+### HTML Styling
+
+Emails use inline CSS for compatibility:
+- Gradient header with brand colors
+- Responsive table layout
+- Clean typography
+- Proper spacing and padding
+
+### Order Email Details
+
+The order confirmation email fetches:
+1. Order information from `orders` table
+2. Customer details from `users` table
+3. Order items with product names from `items` table
+4. Variant details (size, color) from `item_variants` and `colors` tables
+
+**Code reference**: `/api/src/server.js:292-322`
+
+```javascript
+const { data: order } = await supabase
+  .from('orders')
+  .select('*')
+  .eq('id', orderId)
+  .single()
+
+const { data: orderItems } = await supabase
+  .from('order_items')
+  .select(`
+    *,
+    items:item_id (name),
+    variants:variant_id (size, color_id, colors:color_id (name))
+  `)
+  .eq('order_id', orderId)
+```
+
+### Contact Form Features
+
+**File attachments supported**:
+- Maximum size: 10MB
+- All file types allowed
+- Attachment name and size shown in email
+
+**Code reference**: `/api/src/server.js:514-520`
+
+```javascript
+if (attachment) {
+  mailOptions.attachments = [{
+    filename: attachment.originalname,
+    content: attachment.buffer,
+  }]
+}
+```
+
+**Reply-To header**:
+Replies go directly to customer's email
+
+**Code reference**: `/api/src/server.js:509`
+
+```javascript
+replyTo: email,
+```
+
+## Testing Emails
+
+### Without Resend (Development)
+
+If `RESEND_API_KEY` is not set:
+- Emails are logged to console instead of sending
+- Contact form returns success response
+- No actual emails sent
+
+**Code reference**: `/api/src/server.js:422-425`
+
+```javascript
+if (resend) {
+  await resend.emails.send(mailOptions)
+} else {
+  console.log('RESEND_API_KEY not configured, skipping email')
+}
+```
+
+### With Resend (Production)
+
+<Steps>
+  <Step title="Test Order Email">
+    1. Create a test order in your application
+    2. Complete payment with test card: `4242 4242 4242 4242`
+    3. Check Resend dashboard **Logs** for delivery status
+    4. Verify email arrived at recipient inbox
+  </Step>
+
+  <Step title="Test Contact Form">
+    1. Navigate to contact page
+    2. Fill out form with test data
+    3. Optionally attach a file
+    4. Submit form
+    5. Check email inbox and Resend logs
+  </Step>
+
+  <Step title="Monitor Deliverability">
+    In Resend dashboard:
+    1. Go to **Logs** to see all sent emails
+    2. Click on an email to see:
+       - Delivery status
+       - Opens and clicks (if tracking enabled)
+       - Bounce/complaint status
+       - Full email content
+  </Step>
+</Steps>
+
+## Customizing Email Templates
+
+To modify email templates, edit the HTML in:
+
+**Order confirmation**: `/api/src/server.js:351-412`
+
+**Contact form**: `/api/src/server.js:450-504`
+
+### Tips for Email HTML
+
+1. **Use inline styles** - Email clients don't support `<style>` tags well
+2. **Use tables for layout** - Flexbox/Grid not supported in many clients
+3. **Test in multiple clients** - Gmail, Outlook, Apple Mail render differently
+4. **Keep it simple** - Complex CSS often breaks
+5. **Use web fonts carefully** - Many clients fall back to system fonts
+
+### Brand Colors
+
+Current brand gradient:
+```css
+background: linear-gradient(135deg, #8B7355 0%, #A0522D 100%);
+```
+
+Update these in both email templates to match your brand.
+
+## Production Checklist
+
+Before going live:
+
+- [ ] Add and verify custom domain in Resend
+- [ ] Update sender address from `onboarding@resend.dev` to your domain
+- [ ] Set `RESEND_API_KEY` in production environment
+- [ ] Test order confirmation email with live payment
+- [ ] Test contact form with attachment
+- [ ] Configure SPF/DKIM/DMARC DNS records
+- [ ] Monitor email deliverability in Resend dashboard
+- [ ] Set up email forwarding/alias for recipient address
+
+## Next Steps
+
+- [Configure environment variables](/setup/environment-variables)
+- [Deploy API server](/deploy/api)
+- [Test complete checkout flow](/testing/checkout)
+
+## Troubleshooting
+
+### Emails Not Sending
+
+**Check console logs**:
+```bash
+[Webhook] Email sent for order abc-123
+# or
+RESEND_API_KEY not configured, skipping order email
+```
+
+**Verify API key**:
+1. Check `RESEND_API_KEY` is set in environment
+2. Ensure key starts with `re_`
+3. Verify key has send permissions
+
+### Emails Going to Spam
+
+**Solutions**:
+1. Verify custom domain with SPF/DKIM records
+2. Don't use `onboarding@resend.dev` in production
+3. Ensure "From" address matches verified domain
+4. Ask recipients to whitelist your sender address
+5. Check Resend deliverability score
+
+### HTML Rendering Issues
+
+**Common problems**:
+1. Styles not applied → Use inline styles, not `<style>` tags
+2. Layout broken → Use tables instead of divs for structure
+3. Images not loading → Use absolute URLs, not relative paths
+4. Fonts not working → Provide fallback system fonts
+
+**Test tools**:
+- [Litmus](https://litmus.com) - Test across email clients
+- [Email on Acid](https://www.emailonacid.com) - Email testing platform
+- Send test emails to yourself in Gmail, Outlook, Apple Mail
+
+### Attachment Too Large
+
+Maximum attachment size: **10MB**
+
+**Code reference**: `/api/src/server.js:30-33`
+
+```javascript
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+})
+```
+
+To increase:
+1. Update `limits.fileSize` in server.js
+2. Verify Resend supports larger attachments
+3. Consider using file hosting instead for very large files

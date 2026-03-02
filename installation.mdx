@@ -1,0 +1,370 @@
+---
+title: Installation
+description: Complete installation guide for setting up Sabbels Handmade E-Commerce locally
+---
+
+# Installation Guide
+
+This guide walks you through setting up the complete Sabbels Handmade E-Commerce platform on your local machine for development.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed and configured:
+
+- **Node.js** ≥ 18 (recommended: v20 LTS)
+- **npm** or **pnpm** package manager
+- **Git** for cloning the repository
+- **Supabase account** with a configured project
+- **Stripe account** with API keys
+
+<Note>
+This guide assumes you're using a Unix-like system (macOS, Linux, WSL). Windows users should use WSL2 for the best experience.
+</Note>
+
+## Installation Overview
+
+<Steps>
+  <Step title="Clone the repository">
+    Get the source code on your local machine
+  </Step>
+  <Step title="Set up the database">
+    Configure Supabase and run database migrations
+  </Step>
+  <Step title="Install and configure the API">
+    Set up the Express backend server
+  </Step>
+  <Step title="Install and configure the client">
+    Set up the React frontend application
+  </Step>
+  <Step title="Verify the installation">
+    Test that everything works together
+  </Step>
+</Steps>
+
+## Step 1: Clone the Repository
+
+Clone the repository and navigate to the project directory:
+
+```bash
+git clone https://github.com/aluxey/E-Commerce.git
+cd E-Commerce
+```
+
+The repository structure:
+```
+E-Commerce/
+├── client/             # React frontend
+├── api/                # Express backend
+└── Database/           # SQL scripts and migrations
+```
+
+## Step 2: Set Up the Database
+
+### Create a Supabase Project
+
+1. Go to [supabase.com](https://supabase.com) and sign in
+2. Click **New Project**
+3. Fill in the project details:
+   - Name: `sabbels-handmade` (or your choice)
+   - Database Password: Generate a strong password
+   - Region: Choose closest to your location
+4. Wait for the project to be provisioned (~2 minutes)
+
+### Run Database Migrations
+
+Execute the SQL scripts in the following order via the Supabase SQL Editor:
+
+<Steps>
+  <Step title="Create the database schema">
+    Navigate to **SQL Editor** in your Supabase dashboard, create a new query, and paste the contents of `Database/BDD_struct.sql`. This creates all tables, indexes, triggers, and constraints.
+    
+    ```bash
+    # Copy the file contents
+    cat Database/BDD_struct.sql
+    ```
+    
+    Click **Run** in the SQL Editor.
+  </Step>
+  
+  <Step title="Set up Row Level Security">
+    Create a new query and paste the contents of `Database/RLS.sql`. This sets up all security policies.
+    
+    ```bash
+    cat Database/RLS.sql
+    ```
+    
+    Click **Run** in the SQL Editor.
+  </Step>
+  
+  <Step title="Load seed data (optional)">
+    For development, you can load sample data by running `Database/SEED.sql`:
+    
+    ```bash
+    cat Database/SEED.sql
+    ```
+    
+    Click **Run** in the SQL Editor. This creates sample categories, colors, and products.
+  </Step>
+</Steps>
+
+### Configure Storage
+
+1. In your Supabase dashboard, go to **Storage**
+2. Create a new bucket named `product-images`
+3. Set the bucket to **Public**
+4. Configure the following policies (or use the SQL in `Database/RLS.sql`):
+   - Anyone can read images
+   - Only admins can upload/delete images
+
+### Get Your Supabase Credentials
+
+You'll need these for the next steps:
+
+1. Go to **Project Settings** → **API**
+2. Copy the following:
+   - **Project URL** (e.g., `https://xxx.supabase.co`)
+   - **Anon Public Key** (starts with `eyJ...`)
+   - **Service Role Key** (starts with `eyJ...`)
+
+<Warning>
+Never commit your `service_role` key to version control. It bypasses all RLS policies.
+</Warning>
+
+## Step 3: Install and Configure the API
+
+### Install Dependencies
+
+```bash
+cd api
+npm install
+```
+
+### Configure Environment Variables
+
+Create a `.env` file in the `api/` directory:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your credentials:
+
+```bash
+# Server
+PORT=3001
+NODE_ENV=development
+CLIENT_ORIGIN=http://localhost:5173
+
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Email (optional for development)
+RESEND_API_KEY=re_...
+```
+
+<Accordion title="Where to get Stripe credentials">
+1. Log in to [stripe.com](https://stripe.com)
+2. Go to **Developers** → **API keys**
+3. Copy your **Secret key** (starts with `sk_test_`)
+4. For webhooks, see [Stripe Configuration](/setup/stripe)
+</Accordion>
+
+### Start the API Server
+
+```bash
+npm run dev
+```
+
+You should see:
+```
+[api] listening on :3001
+```
+
+The API will be available at `http://localhost:3001`.
+
+### Test the API
+
+Open a new terminal and test the health endpoint:
+
+```bash
+curl http://localhost:3001/api/health
+```
+
+Expected response:
+```json
+{"ok":true}
+```
+
+## Step 4: Install and Configure the Client
+
+### Install Dependencies
+
+Open a new terminal window:
+
+```bash
+cd client
+npm install
+```
+
+### Configure Environment Variables
+
+Create a `.env` file in the `client/` directory:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your credentials:
+
+```bash
+# Supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-public-key
+
+# Stripe
+VITE_STRIPE_PUBLIC_KEY=pk_test_...
+
+# API
+VITE_API_URL=http://localhost:3001
+```
+
+<Note>
+The `VITE_` prefix is required for Vite to expose these variables to the client.
+</Note>
+
+### Start the Development Server
+
+```bash
+npm run dev
+```
+
+You should see:
+```
+  VITE v7.0.0  ready in 324 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+```
+
+The application will be available at `http://localhost:5173`.
+
+## Step 5: Verify the Installation
+
+### Create an Admin User
+
+1. Open `http://localhost:5173` in your browser
+2. Click **Sign Up** and create an account
+3. Go to your Supabase dashboard → **Table Editor** → **users**
+4. Find your user and change the `role` field from `client` to `admin`
+
+### Test Key Features
+
+<CardGroup cols={2}>
+  <Card title="Browse Products" icon="boxes-stacked">
+    Navigate to the home page and verify products are displayed (if you loaded seed data)
+  </Card>
+  <Card title="Admin Dashboard" icon="gauge">
+    Go to `/admin` and verify you can access the admin panel
+  </Card>
+  <Card title="Add to Cart" icon="cart-shopping">
+    Click on a product and add it to your cart
+  </Card>
+  <Card title="Language Switch" icon="globe">
+    Toggle between German and French using the language selector
+  </Card>
+</CardGroup>
+
+### Verify API Connection
+
+Check the browser console for any errors. You should see successful API calls to:
+- Supabase (authentication, data fetching)
+- Your local API server (health checks)
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Database connection errors">
+    - Verify your `SUPABASE_URL` and credentials are correct
+    - Check that all SQL scripts ran successfully without errors
+    - Ensure RLS policies are properly configured
+  </Accordion>
+  
+  <Accordion title="CORS errors in the browser">
+    - Make sure the API server is running on port 3001
+    - Verify `CLIENT_ORIGIN` in the API `.env` includes `http://localhost:5173`
+    - Check that both servers are running
+  </Accordion>
+  
+  <Accordion title="Build errors">
+    - Ensure you're using Node.js 18 or higher: `node --version`
+    - Clear `node_modules` and reinstall: `rm -rf node_modules && npm install`
+    - Check for missing environment variables
+  </Accordion>
+  
+  <Accordion title="Stripe payment errors">
+    - Verify you're using test mode keys (starting with `sk_test_` and `pk_test_`)
+    - For local webhook testing, see [Stripe Configuration](/setup/stripe)
+    - Check the API server logs for webhook errors
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have everything installed:
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Follow the quickstart to understand the core workflows
+  </Card>
+  <Card title="Admin Guide" icon="user-gear" href="/admin-guide/dashboard">
+    Learn how to manage products, orders, and customers
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the backend API endpoints
+  </Card>
+  <Card title="Deployment" icon="cloud" href="/deployment/frontend">
+    Deploy your instance to production
+  </Card>
+</CardGroup>
+
+## Development Workflow
+
+### Running Both Servers Concurrently
+
+For convenience, you can run both servers in parallel. In the root directory, you can create a `package.json` with a `dev` script:
+
+```json
+{
+  "scripts": {
+    "dev:api": "cd api && npm run dev",
+    "dev:client": "cd client && npm run dev"
+  }
+}
+```
+
+Or use a tool like `concurrently`:
+
+```bash
+npm install -g concurrently
+concurrently "cd api && npm run dev" "cd client && npm run dev"
+```
+
+### Hot Reloading
+
+- **Client**: Vite provides instant hot module replacement (HMR)
+- **API**: Node.js `--watch` flag provides automatic server restarts
+
+### Database Changes
+
+When modifying the database schema:
+1. Create a new migration file in `Database/migrations/`
+2. Follow the naming convention: `YYYYMMDD_description.sql`
+3. Run the migration in the Supabase SQL Editor
+4. Document the changes in your changelog
+
+For more details, see [Database Migrations](/deployment/database-migrations).

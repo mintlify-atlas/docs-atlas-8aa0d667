@@ -1,0 +1,404 @@
+---
+title: Environment Variables
+description: Complete reference for all environment variables in client and API
+---
+
+This page documents all environment variables required for the Sabbels Handmade e-commerce application.
+
+## Overview
+
+The application has two environments:
+- **Client** (React/Vite frontend)
+- **API** (Express backend)
+
+Each requires separate configuration files.
+
+## Client Environment Variables
+
+Location: `/client/.env.local`
+
+<Note>
+  Vite requires all client-side environment variables to be prefixed with `VITE_`.
+</Note>
+
+### Supabase Configuration
+
+<ParamField path="VITE_SUPABASE_URL" type="string" required>
+  Your Supabase project URL.
+  
+  **Where to find**: Supabase Dashboard → Project Settings → API → Project URL
+  
+  **Example**: `https://abcdefghijklm.supabase.co`
+  
+  **Used in**: `/client/src/supabase/supabaseClient.js:3`
+</ParamField>
+
+<ParamField path="VITE_SUPABASE_ANON_KEY" type="string" required>
+  Your Supabase anonymous (public) key.
+  
+  **Where to find**: Supabase Dashboard → Project Settings → API → Project API keys → `anon` `public`
+  
+  **Example**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+  
+  **Used in**: `/client/src/supabase/supabaseClient.js:5-6`
+  
+  <Warning>
+    Use the `anon` key, not the `service_role` key! The service role key should never be exposed in client code.
+  </Warning>
+</ParamField>
+
+<ParamField path="VITE_SUPABASE_KEY" type="string" deprecated>
+  Legacy name for `VITE_SUPABASE_ANON_KEY`.
+  
+  **Status**: Deprecated but still supported for backward compatibility.
+  
+  **Migration**: Use `VITE_SUPABASE_ANON_KEY` instead.
+</ParamField>
+
+### Stripe Configuration
+
+<ParamField path="VITE_STRIPE_PUBLIC_KEY" type="string" required>
+  Your Stripe publishable key for client-side payments.
+  
+  **Where to find**: Stripe Dashboard → Developers → API keys → Publishable key
+  
+  **Test mode**: `pk_test_...`
+  
+  **Live mode**: `pk_live_...`
+  
+  **Example**: `pk_test_51Ab3CdEfGhIjKlMnOpQrStUvWxYz...`
+  
+  <Warning>
+    Use test keys for development (`pk_test_`) and live keys for production (`pk_live_`).
+  </Warning>
+</ParamField>
+
+### API Configuration
+
+<ParamField path="VITE_API_BASE_URL" type="string" required>
+  Base URL for your API server.
+  
+  **Development**: `http://localhost:3000`
+  
+  **Production**: `https://your-api.example.com`
+  
+  **Example**: `http://localhost:3000`
+  
+  <Note>
+    Do not include trailing slash or `/api` path. The client adds these automatically.
+  </Note>
+</ParamField>
+
+### Example Client .env.local
+
+```bash
+# Supabase
+VITE_SUPABASE_URL=https://abcdefghijklm.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG0iLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY0MDk5NTIwMCwiZXhwIjoxOTU2NTcxMjAwfQ.example
+
+# Stripe
+VITE_STRIPE_PUBLIC_KEY=pk_test_51Ab3CdEfGhIjKlMnOpQrStUvWxYz1234567890
+
+# API
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+## API Environment Variables
+
+Location: `/api/.env`
+
+### Server Configuration
+
+<ParamField path="PORT" type="number" default="3000">
+  Port number for the API server.
+  
+  **Default**: `3000`
+  
+  **Example**: `3000`
+  
+  **Used in**: `/api/src/server.js:8`
+  
+  <Note>
+    Most deployment platforms set this automatically (Heroku, Railway, Render).
+  </Note>
+</ParamField>
+
+<ParamField path="NODE_ENV" type="string" default="development">
+  Environment mode.
+  
+  **Options**: `development` | `production`
+  
+  **Default**: `development`
+  
+  **Used in**: `/api/src/server.js:132` (CORS configuration)
+  
+  <Note>
+    In development mode, CORS allows all origins. In production, only `CLIENT_ORIGIN` is allowed.
+  </Note>
+</ParamField>
+
+<ParamField path="CLIENT_ORIGIN" type="string">
+  Comma-separated list of allowed client URLs for CORS.
+  
+  **Example**: `https://sabbelshandmade.netlify.app,https://sabbelshandmade.com`
+  
+  **Used in**: `/api/src/server.js:9`
+  
+  <Note>
+    Multiple origins can be separated by commas. Whitespace is automatically trimmed.
+  </Note>
+</ParamField>
+
+### Supabase Configuration
+
+<ParamField path="SUPABASE_URL" type="string" required>
+  Your Supabase project URL.
+  
+  **Where to find**: Supabase Dashboard → Project Settings → API → Project URL
+  
+  **Example**: `https://abcdefghijklm.supabase.co`
+  
+  **Used in**: `/api/src/server.js:12`
+</ParamField>
+
+<ParamField path="SUPABASE_SERVICE_ROLE_KEY" type="string" required>
+  Your Supabase service role key for admin access.
+  
+  **Where to find**: Supabase Dashboard → Project Settings → API → Project API keys → `service_role` `secret`
+  
+  **Example**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+  
+  **Used in**: `/api/src/server.js:13,24`
+  
+  <Warning>
+    This key bypasses Row Level Security! Keep it secret and only use server-side. Never expose in client code or commit to version control.
+  </Warning>
+</ParamField>
+
+### Stripe Configuration
+
+<ParamField path="STRIPE_SECRET_KEY" type="string" required>
+  Your Stripe secret key for server-side operations.
+  
+  **Where to find**: Stripe Dashboard → Developers → API keys → Secret key
+  
+  **Test mode**: `sk_test_...`
+  
+  **Live mode**: `sk_live_...`
+  
+  **Example**: `sk_test_51Ab3CdEfGhIjKlMnOpQrStUvWxYz...`
+  
+  **Used in**: `/api/src/server.js:10,23`
+  
+  <Warning>
+    Never expose this key! Use test keys for development and live keys for production.
+  </Warning>
+</ParamField>
+
+<ParamField path="STRIPE_WEBHOOK_SECRET" type="string" required>
+  Webhook signing secret for verifying Stripe events.
+  
+  **Where to find**: Stripe Dashboard → Developers → Webhooks → [Your endpoint] → Signing secret
+  
+  **Example**: `whsec_abcdef1234567890...`
+  
+  **Used in**: `/api/src/server.js:11,42`
+  
+  <Note>
+    For local testing with Stripe CLI: Run `stripe listen --forward-to localhost:3000/api/stripe/webhook` and use the provided webhook secret.
+  </Note>
+</ParamField>
+
+### Email Configuration
+
+<ParamField path="RESEND_API_KEY" type="string" optional>
+  Resend API key for sending transactional emails.
+  
+  **Where to find**: Resend Dashboard → API Keys
+  
+  **Example**: `re_abcdef123456_7890ghijklmnopqrstuvwxyz`
+  
+  **Used in**: `/api/src/server.js:16,27`
+  
+  <Note>
+    If not set, emails are logged to console instead of being sent. Useful for local development.
+  </Note>
+</ParamField>
+
+### Example API .env
+
+```bash
+# Server
+PORT=3000
+NODE_ENV=development
+CLIENT_ORIGIN=http://localhost:5173,https://sabbelshandmade.netlify.app
+
+# Supabase
+SUPABASE_URL=https://abcdefghijklm.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG0iLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE5NTY1NzEyMDB9.example
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_51Ab3CdEfGhIjKlMnOpQrStUvWxYz1234567890
+STRIPE_WEBHOOK_SECRET=whsec_abcdef1234567890ghijklmnopqrstuvwxyz
+
+# Email (optional)
+RESEND_API_KEY=re_abcdef123456_7890ghijklmnopqrstuvwxyz
+```
+
+## Security Best Practices
+
+<Warning>
+  Never commit `.env` or `.env.local` files to version control!
+</Warning>
+
+### Add to .gitignore
+
+Ensure these files are in your `.gitignore`:
+
+```bash
+# Environment files
+.env
+.env.local
+.env.*.local
+```
+
+### Use Different Keys per Environment
+
+| Environment | Stripe | Supabase | Resend |
+|-------------|--------|----------|--------|
+| Development | Test keys (`sk_test_`, `pk_test_`) | Dev project | Test API key |
+| Staging | Test keys | Staging project | Staging domain |
+| Production | Live keys (`sk_live_`, `pk_live_`) | Production project | Production domain |
+
+### Rotate Keys Regularly
+
+If a key is exposed:
+1. Immediately revoke it in the service dashboard
+2. Generate a new key
+3. Update environment variables
+4. Redeploy applications
+
+### Use Secret Management
+
+For production:
+- **Netlify**: Environment variables in site settings
+- **Vercel**: Environment variables in project settings
+- **Railway**: Environment variables in deployment settings
+- **Heroku**: Config vars in app settings
+
+## Validation
+
+Both client and server validate required environment variables on startup.
+
+### Client Validation
+
+**Code reference**: `/client/src/supabase/supabaseClient.js:8-17`
+
+```javascript
+if (!supabaseUrl) {
+  console.error(
+    "Missing VITE_SUPABASE_URL. Add it to client/.env.local"
+  )
+}
+if (!supabaseAnonKey) {
+  console.error(
+    "Missing VITE_SUPABASE_ANON_KEY. Add it to client/.env.local"
+  )
+}
+```
+
+### Server Validation
+
+**Code reference**: `/api/src/server.js:19-21`
+
+```javascript
+if (!STRIPE_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing required environment variables for API server.')
+}
+```
+
+## Deployment Environments
+
+### Netlify (Client)
+
+1. Go to Site settings → Build & deploy → Environment
+2. Add variables:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_STRIPE_PUBLIC_KEY`
+   - `VITE_API_BASE_URL`
+3. Redeploy site
+
+### Railway (API)
+
+1. Go to your project → Variables
+2. Add variables from [API section](#api-environment-variables)
+3. Railway auto-redeploys on variable changes
+
+### Heroku (API)
+
+```bash
+# Set variables via CLI
+heroku config:set SUPABASE_URL=https://abcdefghijklm.supabase.co
+heroku config:set SUPABASE_SERVICE_ROLE_KEY=eyJ...
+heroku config:set STRIPE_SECRET_KEY=sk_test_...
+heroku config:set STRIPE_WEBHOOK_SECRET=whsec_...
+heroku config:set RESEND_API_KEY=re_...
+```
+
+Or use the Heroku Dashboard:
+1. Go to Settings → Config Vars
+2. Add each variable
+
+## Troubleshooting
+
+### "Missing required environment variables"
+
+**Client**: Check browser console for specific missing variables.
+
+**Server**: Check server logs on startup.
+
+### Variables Not Loading
+
+**Vite (Client)**:
+- Ensure variables start with `VITE_`
+- Restart dev server after adding variables
+- Check file is named `.env.local` (not `.env`)
+
+**Node (API)**:
+- If using `--env-file` flag: Ensure file path is correct
+- If using `dotenv`: Ensure `require('dotenv').config()` is called
+- Restart server after changes
+
+### CORS Errors in Production
+
+```
+Access to fetch at 'https://api.example.com' from origin 'https://client.example.com' has been blocked by CORS
+```
+
+**Solution**: Add client URL to `CLIENT_ORIGIN`:
+
+```bash
+CLIENT_ORIGIN=https://client.example.com,https://www.client.example.com
+```
+
+### Stripe Webhooks Failing
+
+```
+Webhook signature verification failed
+```
+
+**Causes**:
+1. Wrong `STRIPE_WEBHOOK_SECRET` for the environment
+2. Using local webhook secret in production
+3. Using production webhook secret locally
+
+**Solution**: 
+- Local: Use Stripe CLI webhook secret
+- Production: Use webhook endpoint secret from Stripe Dashboard
+
+## Next Steps
+
+- [Deploy the client](/deploy/netlify)
+- [Deploy the API](/deploy/api)
+- [Test the complete application](/testing/overview)

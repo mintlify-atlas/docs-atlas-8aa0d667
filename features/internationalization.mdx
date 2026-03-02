@@ -1,0 +1,342 @@
+---
+title: "Internationalization"
+description: "Multi-language support with i18next for German and French localization"
+---
+
+## Overview
+
+Sabbels Handmade provides a bilingual shopping experience with support for German (default) and French. The internationalization system uses i18next with React bindings, persistent language preferences, and automatic browser language detection.
+
+## Language Configuration
+
+The i18n setup initializes with intelligent language detection:
+
+<CodeGroup>
+
+```javascript i18n.js
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import de from './locales/de/translation.json';
+import fr from './locales/fr/translation.json';
+
+// Language detection priority:
+// 1. Previously saved preference (localStorage)
+// 2. Browser language (if French)
+// 3. Default to German
+const storedLang = localStorage.getItem('lang');
+const browserLang = navigator.language?.slice(0, 2);
+const initialLang = storedLang || (browserLang === 'fr' ? 'fr' : 'de');
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources: {
+      de: { translation: de },
+      fr: { translation: fr },
+    },
+    lng: initialLang,
+    fallbackLng: 'de',
+    interpolation: {
+      escapeValue: false, // React already escapes
+    },
+    react: {
+      useSuspense: false, // Avoid loading flicker
+    },
+  });
+
+// Persist language changes to localStorage
+i18n.on('languageChanged', lng => {
+  localStorage.setItem('lang', lng);
+});
+
+export default i18n;
+```
+
+</CodeGroup>
+
+## Language Files Structure
+
+Translations are organized in JSON files under `client/src/locales/`:
+
+```
+client/src/locales/
+├── de/
+│   └── translation.json
+└── fr/
+    └── translation.json
+```
+
+Each translation file contains nested keys for different sections:
+
+<Tabs>
+  <Tab title="German (de)">
+    ```json
+    {
+      "nav": {
+        "home": "Startseite",
+        "shop": "Shop",
+        "about": "Über uns",
+        "contact": "Kontakt"
+      },
+      "product": {
+        "addToCart": "In den Warenkorb",
+        "outOfStock": "Ausverkauft",
+        "price": "Preis",
+        "size": "Größe",
+        "color": "Farbe"
+      },
+      "checkout": {
+        "title": "Kasse",
+        "total": "Gesamt",
+        "payNow": "Jetzt bezahlen"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="French (fr)">
+    ```json
+    {
+      "nav": {
+        "home": "Accueil",
+        "shop": "Boutique",
+        "about": "À propos",
+        "contact": "Contact"
+      },
+      "product": {
+        "addToCart": "Ajouter au panier",
+        "outOfStock": "Épuisé",
+        "price": "Prix",
+        "size": "Taille",
+        "color": "Couleur"
+      },
+      "checkout": {
+        "title": "Caisse",
+        "total": "Total",
+        "payNow": "Payer maintenant"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Using Translations in Components
+
+The `useTranslation` hook provides access to translation functions:
+
+### Basic Translation
+
+```jsx
+import { useTranslation } from 'react-i18next';
+
+function ProductCard({ product }) {
+  const { t } = useTranslation();
+
+  return (
+    <div>
+      <h3>{product.name}</h3>
+      <p>{t('product.price')}: {product.price} €</p>
+      <button>{t('product.addToCart')}</button>
+    </div>
+  );
+}
+```
+
+### Translation with Interpolation
+
+```jsx
+function OrderConfirmation({ orderId, total }) {
+  const { t } = useTranslation();
+
+  return (
+    <div>
+      <h2>{t('order.confirmation', { orderId })}</h2>
+      <p>{t('order.totalAmount', { amount: total })}</p>
+    </div>
+  );
+}
+```
+
+Corresponding translation keys:
+
+```json
+{
+  "order": {
+    "confirmation": "Bestellung #{{orderId}} bestätigt",
+    "totalAmount": "Gesamtbetrag: {{amount}} €"
+  }
+}
+```
+
+### Pluralization
+
+```jsx
+function CartSummary({ itemCount }) {
+  const { t } = useTranslation();
+
+  return <p>{t('cart.items', { count: itemCount })}</p>;
+}
+```
+
+```json
+{
+  "cart": {
+    "items_one": "{{count}} Artikel",
+    "items_other": "{{count}} Artikel"
+  }
+}
+```
+
+## Language Switcher
+
+Implement a language toggle component to allow users to change languages:
+
+```jsx
+import { useTranslation } from 'react-i18next';
+
+function LanguageSwitcher() {
+  const { i18n } = useTranslation();
+  const currentLang = i18n.language;
+
+  const toggleLanguage = () => {
+    const newLang = currentLang === 'de' ? 'fr' : 'de';
+    i18n.changeLanguage(newLang);
+  };
+
+  return (
+    <button onClick={toggleLanguage}>
+      {currentLang === 'de' ? '🇫🇷 Français' : '🇩🇪 Deutsch'}
+    </button>
+  );
+}
+```
+
+<Info>
+  Language changes are automatically persisted to `localStorage` and will be restored on the next visit.
+</Info>
+
+## Date and Number Formatting
+
+For locale-aware formatting of dates and numbers, use native JavaScript APIs:
+
+### Date Formatting
+
+```javascript
+import { useTranslation } from 'react-i18next';
+
+function OrderDate({ date }) {
+  const { i18n } = useTranslation();
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'de-DE';
+
+  const formattedDate = new Date(date).toLocaleDateString(locale, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return <span>{formattedDate}</span>;
+}
+```
+
+### Number/Currency Formatting
+
+```javascript
+function Price({ amount, currency = 'EUR' }) {
+  const { i18n } = useTranslation();
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'de-DE';
+
+  const formatted = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: currency,
+  }).format(amount);
+
+  return <span>{formatted}</span>;
+}
+```
+
+## Backend Email Localization
+
+The backend email templates use German by default for order confirmations sent to the shop owner:
+
+```javascript server.js:343
+const orderDate = new Date(order.created_at).toLocaleDateString('de-DE', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+});
+```
+
+<Note>
+  Consider extending the email system to use the customer's preferred language for customer-facing emails by storing the language preference in the order metadata.
+</Note>
+
+## Best Practices
+
+### Namespace Organization
+
+Organize translation keys by feature or page:
+
+```json
+{
+  "nav": { ... },
+  "home": { ... },
+  "shop": { ... },
+  "product": { ... },
+  "cart": { ... },
+  "checkout": { ... },
+  "account": { ... },
+  "admin": { ... }
+}
+```
+
+### Avoid Hardcoded Strings
+
+Always use translation keys for user-facing text:
+
+<Tabs>
+  <Tab title="Good">
+    ```jsx
+    <button>{t('product.addToCart')}</button>
+    ```
+  </Tab>
+  <Tab title="Bad">
+    ```jsx
+    <button>Add to Cart</button>
+    ```
+  </Tab>
+</Tabs>
+
+### Keep Keys Consistent
+
+Use the same translation keys across both language files to ensure completeness:
+
+```bash
+# Validate that all keys exist in both files
+npm run i18n:validate
+```
+
+## Adding a New Language
+
+To add support for another language:
+
+1. Create a new translation file: `client/src/locales/[lang]/translation.json`
+2. Import and register it in `i18n.js`:
+
+```javascript
+import it from './locales/it/translation.json';
+
+i18n.use(initReactI18next).init({
+  resources: {
+    de: { translation: de },
+    fr: { translation: fr },
+    it: { translation: it }, // New language
+  },
+  // ...
+});
+```
+
+3. Update the language switcher to include the new option
+4. Test all pages to ensure translations are complete

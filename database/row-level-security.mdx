@@ -1,0 +1,451 @@
+---
+title: 'Row Level Security (RLS)'
+description: 'Complete RLS policy documentation for access control and multi-tenant security'
+---
+
+## Overview
+
+The Sabbels Handmade database implements PostgreSQL Row Level Security (RLS) on all tables to enforce fine-grained access control. Policies differentiate between anonymous users, authenticated clients, and administrators.
+
+<Note>
+  All tables in the `public` schema have RLS **enabled**. Without appropriate policies, users cannot access any data.
+</Note>
+
+## RLS Activation
+
+RLS is enabled on all core tables:
+
+```sql
+alter table public.users          enable row level security;
+alter table public.colors         enable row level security;
+alter table public.item_colors    enable row level security;
+alter table public.items          enable row level security;
+alter table public.item_images    enable row level security;
+alter table public.item_variants  enable row level security;
+alter table public.item_ratings   enable row level security;
+alter table public.orders         enable row level security;
+alter table public.order_items    enable row level security;
+alter table public.payments       enable row level security;
+alter table public.stripe_events  enable row level security;
+alter table public.customer_photos enable row level security;
+```
+
+## Helper Functions
+
+### is_admin()
+
+Utility function to check if a user has admin privileges.
+
+```sql
+create or replace function public.is_admin(uid uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public as $$
+  select exists (
+    select 1 from public.users u where u.id = uid and u.role = 'admin'
+  );
+$$;
+
+grant execute on function public.is_admin(uuid) to anon, authenticated;
+```
+
+- **Security Definer**: Executes with owner privileges to read user roles
+- **Stable**: Allows query optimization (result doesn't change within transaction)
+- **Granted to**: Both `anon` and `authenticated` roles can execute
+
+## User Roles
+
+The database recognizes three user contexts:
+
+1. **anon** - Unauthenticated visitors (browsing products)
+2. **authenticated** - Logged-in users with role 'client'
+3. **admin** - Authenticated users with role 'admin'
+
+## Policy Patterns
+
+Policies follow consistent patterns across tables:
+
+### Public Read Pattern
+Catalog data (items, colors, variants) is publicly readable:
+```sql
+to anon, authenticated using (true)
+```
+
+### Admin Write Pattern
+Only admins can modify catalog data:
+```sql
+to authenticated using ( public.is_admin(auth.uid()) )
+with check ( public.is_admin(auth.uid()) )
+```
+
+### Own Data Pattern
+Users can manage their own data:
+```sql
+to authenticated using ( user_id = auth.uid() )
+with check ( user_id = auth.uid() )
+```
+
+## Table Policies
+
+### users
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Users: select own or admin" | SELECT | authenticated | View own profile or any profile if admin |
+| "Users: insert self or admin" | INSERT | authenticated | Create own account or any account if admin |
+| "Users: update self or admin" | UPDATE | authenticated | Update own profile or any profile if admin |
+| "Users: delete admin only" | DELETE | authenticated | Only admins can delete users |
+
+```sql
+create policy "Users: select own or admin" on public.users for select
+  to authenticated using ( id = auth.uid() or public.is_admin(auth.uid()) );
+
+create policy "Users: delete admin only" on public.users for delete
+  to authenticated using ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### colors
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Colors: public read" | SELECT | anon, authenticated | Anyone can view colors |
+| "Colors: admin write" | ALL | authenticated (admin) | Only admins can manage colors |
+
+```sql
+create policy "Colors: public read" on public.colors for select
+  to anon, authenticated using (true);
+
+create policy "Colors: admin write" on public.colors for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### items
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Items: public read" | SELECT | anon, authenticated | Anyone can browse products |
+| "Items: admin write" | ALL | authenticated (admin) | Only admins can manage items |
+
+```sql
+create policy "Items: public read" on public.items for select
+  to anon, authenticated using (true);
+
+create policy "Items: admin write" on public.items for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+<Note>
+  The public read policy allows browsing all items regardless of status. Filter by `status = 'active'` in your application queries to show only published products to customers.
+</Note>
+
+---
+
+### item_colors
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "ItemColors: public read" | SELECT | anon, authenticated | Anyone can view available colors |
+| "ItemColors: admin write" | ALL | authenticated (admin) | Only admins can assign colors |
+
+```sql
+create policy "ItemColors: public read" on public.item_colors for select
+  to anon, authenticated using (true);
+
+create policy "ItemColors: admin write" on public.item_colors for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### item_images
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "ItemImages: public read" | SELECT | anon, authenticated | Anyone can view product images |
+| "ItemImages: admin write" | ALL | authenticated (admin) | Only admins can upload images |
+
+```sql
+create policy "ItemImages: public read" on public.item_images for select
+  to anon, authenticated using (true);
+
+create policy "ItemImages: admin write" on public.item_images for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### item_variants
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Variants: public read" | SELECT | anon, authenticated | Anyone can view sizes and pricing |
+| "Variants: admin write" | ALL | authenticated (admin) | Only admins can manage variants |
+
+```sql
+create policy "Variants: public read" on public.item_variants for select
+  to anon, authenticated using (true);
+
+create policy "Variants: admin write" on public.item_variants for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### item_ratings
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Ratings: public read" | SELECT | anon, authenticated | Anyone can view reviews |
+| "Ratings: user manage own" | ALL | authenticated | Users can create/edit/delete their own reviews |
+
+```sql
+create policy "Ratings: public read" on public.item_ratings for select
+  to anon, authenticated using (true);
+
+create policy "Ratings: user manage own" on public.item_ratings for all
+  to authenticated using ( auth.uid() = user_id )
+  with check ( auth.uid() = user_id );
+```
+
+<Warning>
+  Users can only manage their own reviews. The unique constraint `(item_id, user_id)` ensures one review per user per item.
+</Warning>
+
+---
+
+### orders
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Orders: read own or admin" | SELECT | authenticated | View own orders or all orders if admin |
+| "Orders: create own or admin" | INSERT | authenticated | Create orders for self or any user if admin |
+| "Orders: admin update" | UPDATE | authenticated (admin) | Only admins can update orders |
+| "Orders: admin delete" | DELETE | authenticated (admin) | Only admins can delete orders |
+
+```sql
+create policy "Orders: read own or admin" on public.orders for select
+  to authenticated using ( user_id = auth.uid() or public.is_admin(auth.uid()) );
+
+create policy "Orders: create own or admin" on public.orders for insert
+  to authenticated with check ( user_id = auth.uid() or public.is_admin(auth.uid()) );
+
+create policy "Orders: admin update" on public.orders for update
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### order_items
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "OrderItems: read own via order" | SELECT | authenticated | View line items if order belongs to user |
+| "OrderItems: create own via order" | INSERT | authenticated | Add items to own orders |
+| "OrderItems: admin write" | UPDATE | authenticated (admin) | Only admins can update line items |
+| "OrderItems: admin delete" | DELETE | authenticated (admin) | Only admins can delete line items |
+
+```sql
+create policy "OrderItems: read own via order" on public.order_items for select
+  to authenticated using (
+    exists (
+      select 1 from public.orders o
+      where o.id = order_items.order_id
+        and (o.user_id = auth.uid() or public.is_admin(auth.uid()))
+    )
+  );
+
+create policy "OrderItems: create own via order" on public.order_items for insert
+  to authenticated with check (
+    exists (
+      select 1 from public.orders o
+      where o.id = order_id
+        and (o.user_id = auth.uid() or public.is_admin(auth.uid()))
+    )
+  );
+```
+
+<Note>
+  Access is controlled via the parent `orders` table using subquery checks. Users can only see/add items to orders they own.
+</Note>
+
+---
+
+### payments
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "Payments: admin read" | SELECT | authenticated (admin) | Only admins can view payment records |
+| "Payments: admin write" | ALL | authenticated (admin) | Only admins can manage payments |
+
+```sql
+create policy "Payments: admin read" on public.payments for select
+  to authenticated using ( public.is_admin(auth.uid()) );
+
+create policy "Payments: admin write" on public.payments for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+<Warning>
+  Payment records are **admin-only**. Regular users cannot view payment details, even for their own orders. This protects sensitive financial data.
+</Warning>
+
+---
+
+### stripe_events
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "StripeEvents: admin read" | SELECT | authenticated (admin) | Only admins can view webhook logs |
+| "StripeEvents: admin write" | ALL | authenticated (admin) | Only admins can manage webhook tracking |
+
+```sql
+create policy "StripeEvents: admin read" on public.stripe_events for select
+  to authenticated using ( public.is_admin(auth.uid()) );
+
+create policy "StripeEvents: admin write" on public.stripe_events for all
+  to authenticated using ( public.is_admin(auth.uid()) )
+  with check ( public.is_admin(auth.uid()) );
+```
+
+---
+
+### customer_photos
+
+| Policy | Operation | Role | Rule |
+|--------|-----------|------|------|
+| "customer_photos: public read visible" | SELECT | anon, authenticated | Anyone can view visible photos |
+| "customer_photos: admin read all" | SELECT | authenticated (admin) | Admins can view all photos (including hidden) |
+| "customer_photos: admin write" | INSERT | authenticated (admin) | Only admins can upload photos |
+| "customer_photos: admin update" | UPDATE | authenticated (admin) | Only admins can update photos |
+| "customer_photos: admin delete" | DELETE | authenticated (admin) | Only admins can delete photos |
+
+```sql
+create policy "customer_photos: public read visible"
+  on public.customer_photos for select
+  to anon, authenticated
+  using ( is_visible = true );
+
+create policy "customer_photos: admin read all"
+  on public.customer_photos for select
+  to authenticated
+  using ( public.is_admin(auth.uid()) );
+
+create policy "customer_photos: admin write"
+  on public.customer_photos for insert
+  to authenticated
+  with check ( public.is_admin(auth.uid()) );
+```
+
+<Note>
+  The public can only see photos where `is_visible = true`. Admins have two separate SELECT policies: one for public photos and one for all photos.
+</Note>
+
+---
+
+## Storage Policies
+
+RLS is also applied to Supabase Storage for the `product-images` bucket.
+
+### Product Images Bucket
+
+| Policy | Operation | Rule |
+|--------|-----------|------|
+| "Storage: read product-images" | SELECT | Public read access |
+| "Storage: insert product-images (admin)" | INSERT | Admin-only upload |
+| "Storage: update product-images (admin)" | UPDATE | Admin-only modification |
+| "Storage: delete product-images (admin)" | DELETE | Admin-only deletion |
+
+```sql
+create policy "Storage: read product-images"
+  on storage.objects for select
+  to anon, authenticated
+  using ( bucket_id = 'product-images' );
+
+create policy "Storage: insert product-images (admin)"
+  on storage.objects for insert
+  to authenticated
+  with check ( bucket_id = 'product-images' and public.is_admin(auth.uid()) );
+
+create policy "Storage: update product-images (admin)"
+  on storage.objects for update
+  to authenticated
+  using ( bucket_id = 'product-images' and public.is_admin(auth.uid()) )
+  with check ( bucket_id = 'product-images' and public.is_admin(auth.uid()) );
+
+create policy "Storage: delete product-images (admin)"
+  on storage.objects for delete
+  to authenticated
+  using ( bucket_id = 'product-images' and public.is_admin(auth.uid()) );
+```
+
+## Policy Testing
+
+To test policies, use `SET ROLE` and `SET request.jwt.claims`:
+
+```sql
+-- Test as anonymous user
+SET ROLE anon;
+SELECT * FROM items; -- Should work
+SELECT * FROM payments; -- Should return empty
+
+-- Test as authenticated client
+SET ROLE authenticated;
+SET request.jwt.claim.sub TO '<user-uuid>';
+SELECT * FROM orders WHERE user_id = auth.uid(); -- Should see own orders
+
+-- Test as admin
+SET request.jwt.claim.sub TO '<admin-uuid>';
+SELECT * FROM payments; -- Should see all payments
+```
+
+## Security Best Practices
+
+<Warning>
+  Always use parameterized queries and validate input server-side. RLS prevents unauthorized data access but doesn't protect against SQL injection or business logic errors.
+</Warning>
+
+### Recommendations
+
+1. **Never disable RLS** in production without explicit security review
+2. **Use `SECURITY DEFINER` carefully** - these functions bypass RLS and run with owner privileges
+3. **Test policies thoroughly** for both positive (allowed) and negative (denied) cases
+4. **Audit admin actions** by logging sensitive operations in a separate audit table
+5. **Review policies regularly** as application requirements evolve
+
+### Common Pitfalls
+
+- **Overlapping policies**: Multiple SELECT policies are combined with OR logic. Ensure they don't grant unintended access.
+- **Missing WITH CHECK**: INSERT/UPDATE policies need both `USING` and `WITH CHECK` clauses
+- **Forgetting GRANT**: Even with policies, users need table-level GRANT permissions
+
+## Performance Considerations
+
+RLS policies can impact query performance:
+
+- **Indexed columns**: Ensure `user_id` and other policy-checked columns are indexed
+- **Avoid complex subqueries**: Keep policy expressions simple for query planner optimization
+- **Use `SECURITY DEFINER` functions**: Cache expensive checks like `is_admin()` as stable functions
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Schema" icon="diagram-project" href="/database/schema">
+    View complete database architecture and relationships
+  </Card>
+  <Card title="Tables Reference" icon="table" href="/database/tables">
+    Detailed column documentation for all tables
+  </Card>
+</CardGroup>

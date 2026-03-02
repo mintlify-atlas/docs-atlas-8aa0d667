@@ -1,0 +1,233 @@
+---
+title: 'Shopping Cart'
+description: 'Learn how to add items to your cart, manage quantities, and prepare for checkout'
+---
+
+# Shopping Cart
+
+The shopping cart allows you to collect items before proceeding to checkout. You can manage quantities, review selections, and see your order total.
+
+## Adding Items to Cart
+
+### From Product Detail Page
+
+<Steps>
+  <Step title="Select product options">
+    On the product detail page, choose:
+    - **Size**: Select from available sizes (or "One Size" if no variants)
+    - **Color**: Pick a color from the color picker (if available)
+    - **Hook Type**: Choose your preferred crochet hook pattern:
+      - Default (standard pattern)
+      - Rechtsmuster (right-handed pattern)
+      - Gänsefüßchen (special decorative pattern)
+  </Step>
+  <Step title="Set quantity">
+    Use the quantity controls:
+    - Click **-** to decrease quantity
+    - Click **+** to increase quantity
+    - Type directly into the quantity input
+    - Quantity is limited by available stock
+  </Step>
+  <Step title="Add to cart">
+    Click the **"Add to Cart"** button. You'll see:
+    - A success notification confirming the item was added
+    - The notification disappears after 3 seconds
+  </Step>
+</Steps>
+
+<Note>
+  The "Add to Cart" button is disabled if:
+  - The selected variant is out of stock
+  - No variant is selected
+  - The page is still loading
+</Note>
+
+### Product Variants
+
+Each cart item represents a unique combination of:
+- Base product
+- Selected size
+- Selected color
+- Hook type preference
+
+Adding the same product with different options creates separate cart items.
+
+## Viewing Your Cart
+
+Access your cart by:
+- Clicking the cart icon in the navigation bar
+- Navigating to `/cart` directly
+
+### Cart Page Layout
+
+The cart page shows:
+
+**Left Section (Cart Items)**
+- List of all items in your cart
+- Item image, name, and specifications
+- Quantity controls
+- Individual and total prices
+- Remove button
+
+**Right Section (Order Summary)**
+- Subtotal
+- Shipping information
+- Total amount
+- Checkout button or login prompt
+
+## Managing Cart Items
+
+### Updating Quantities
+
+For each item in your cart:
+
+<Steps>
+  <Step title="Decrease quantity">
+    Click the **-** button to reduce quantity by 1. If quantity reaches 0, the item is removed.
+  </Step>
+  <Step title="Increase quantity">
+    Click the **+** button to add more. The button is disabled if you've reached available stock.
+  </Step>
+</Steps>
+
+<Info>
+  The price display shows both unit price and total price (unit price × quantity) for each item.
+</Info>
+
+### Removing Items
+
+To remove an item from your cart:
+
+**On Desktop:**
+- Click the trash icon button on the right side of the cart item
+
+**On Mobile:**
+- Tap the trash icon in the item header (top-right of item card)
+
+<Tip>
+  The item is removed immediately. If you remove an item by accident, you'll need to add it again from the product page.
+</Tip>
+
+## Cart Item Details
+
+Each cart item displays:
+
+| Information | Description |
+|------------|-------------|
+| **Image** | Product thumbnail |
+| **Name** | Product name |
+| **Size** | Selected size variant |
+| **Color** | Selected color name |
+| **Hook Type** | Chosen crochet pattern (if applicable) |
+| **Unit Price** | Price per item |
+| **Quantity** | Number of items |
+| **Total** | Unit price × quantity |
+
+## Order Summary
+
+The order summary sidebar shows:
+
+### Subtotal
+Sum of all items in cart (quantity × unit price for each item)
+
+### Shipping
+Shipping costs are calculated at checkout based on:
+- Delivery address
+- Order total
+- Shipping method
+
+<Note>
+  Shipping costs are not included in the cart subtotal. They will be shown during the checkout process.
+</Note>
+
+### Total
+Current cart subtotal (shipping will be added at checkout)
+
+## Cart Features
+
+### Item Count Display
+
+At the top of the cart page, you'll see the total number of items:
+- Example: "5 articles" (total of all quantities across all cart items)
+
+### Trust Badges
+
+Below the cart items, you'll find information about:
+- **Fast Shipping**: Delivery within 24-48 hours
+- **Secure Payment**: SSL encrypted transactions
+
+Click these badges to learn more in the FAQ section.
+
+## Empty Cart
+
+If your cart is empty, you'll see:
+- A shopping bag icon
+- "Your cart is empty" message
+- A button to browse the product catalog
+
+## Proceeding to Checkout
+
+### If Logged In
+
+<Steps>
+  <Step title="Review your cart">
+    Verify all items, quantities, and options are correct
+  </Step>
+  <Step title="Click checkout button">
+    The **"Proceed to Checkout"** button is located in the order summary sidebar
+  </Step>
+  <Step title="Complete payment">
+    You'll be redirected to the checkout page to enter shipping and payment information
+  </Step>
+</Steps>
+
+### If Not Logged In
+
+You must log in before checking out:
+
+1. You'll see a login prompt in the order summary section
+2. Click the **"Log In"** button
+3. After logging in, you'll return to your cart
+4. Your cart items are preserved across login
+
+<Info>
+  Creating an account is required to complete a purchase. This allows you to track your order and view order history.
+</Info>
+
+## Continue Shopping
+
+To add more items:
+- Click **"Continue Shopping"** at the bottom of the order summary
+- You'll return to the product catalog
+- Your cart is preserved while you browse
+
+## Cart Persistence
+
+Your cart:
+- Is stored in local browser storage
+- Persists across browser sessions
+- Is maintained when you log in/out
+- Is cleared only when you:
+  - Manually remove all items
+  - Complete a purchase
+  - Clear your browser data
+
+<Tip>
+  You can safely close your browser and return later - your cart will still be there!
+</Tip>
+
+## Stock Limitations
+
+If an item has limited stock:
+- The **+** button is disabled when you reach the maximum available quantity
+- You cannot add more than the available stock to your cart
+- Stock levels are checked in real-time when you add items
+
+## Mobile Experience
+
+On mobile devices:
+- Cart items display in a single column
+- Item details are stacked vertically for easier reading
+- Remove button appears in the item header
+- Order summary is positioned below the cart items
+- All functionality remains the same as desktop

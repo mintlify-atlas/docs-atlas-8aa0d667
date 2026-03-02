@@ -1,0 +1,401 @@
+---
+title: Customer Photos
+description: Manage the photo wall feature with drag-and-drop uploads, visibility controls, and reordering
+---
+
+The Customer Photo Manager allows you to curate photos displayed on your storefront's photo wall.
+
+## Photo Structure
+
+Each photo contains:
+- `image_url` - Public URL to the uploaded image
+- `position` - Display order (integer)
+- `is_visible` - Visibility toggle (boolean)
+- `created_at` - Upload timestamp
+
+**Database Table:** `customer_photos`
+
+**Storage Bucket:** `customer-photos`
+
+## Uploading Photos
+
+Two upload methods are available:
+
+### 1. Drag and Drop
+
+<Steps>
+  <Step title="Drag Files">
+    Drag image files over the upload zone
+    
+    Zone highlights when files are dragged over it
+  </Step>
+  
+  <Step title="Drop to Upload">
+    Release to start upload process
+    
+    ```javascript
+    // CustomerPhotoManager.jsx:102
+    const handleDropZoneDrop = (e) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      handleFiles(e.dataTransfer.files);
+    };
+    ```
+  </Step>
+  
+  <Step title="Multiple Files">
+    Multiple images can be dropped simultaneously
+    
+    All valid image files will be uploaded
+  </Step>
+</Steps>
+
+### 2. File Browser
+
+<Steps>
+  <Step title="Click Upload Zone">
+    Click anywhere in the upload zone
+    
+    Opens file picker dialog
+  </Step>
+  
+  <Step title="Select Images">
+    Choose one or multiple image files
+    
+    **Accepted:** All image/* MIME types
+  </Step>
+  
+  <Step title="Upload">
+    Files upload automatically after selection
+  </Step>
+</Steps>
+
+### Upload Process
+
+```javascript
+// CustomerPhotoManager.jsx:50
+const handleFiles = useCallback(
+  async (files) => {
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    const currentMax = photos.length > 0
+      ? Math.max(...photos.map((p) => p.position))
+      : -1;
+
+    let successCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith("image/")) continue;
+
+      const { error: upErr } = await uploadPhoto(file, currentMax + 1 + i);
+      if (upErr) {
+        pushToast(t("admin.customerPhotos.error.upload"), "error");
+      } else {
+        successCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      pushToast(t("admin.customerPhotos.success.upload"), "success");
+      await fetchPhotos();
+    }
+    setUploading(false);
+  },
+  [photos, t, fetchPhotos]
+);
+```
+
+**Position Calculation:**
+- New photos appended to end
+- Position = current max position + 1
+- Sequential positions for multiple uploads
+
+<Info>
+Only image files are processed. Non-image files in a multi-file selection are skipped automatically.
+</Info>
+
+## Photo Grid
+
+Photos display in a responsive grid with controls:
+
+### Photo Card Components
+
+**Drag Handle** (top-left):
+- Six-dot icon for reordering
+- Indicates draggable functionality
+
+**Position Badge:**
+- Shows current position number (#1, #2, etc.)
+- Updates when reordering
+
+**Action Buttons:**
+- **Eye Icon:** Toggle visibility
+- **Trash Icon:** Delete photo
+
+**Implementation:** `CustomerPhotoManager.jsx:263`
+
+## Visibility Control
+
+Toggle whether photos appear on the public storefront:
+
+```javascript
+// CustomerPhotoManager.jsx:125
+const handleToggleVisibility = useCallback(
+  async (photo) => {
+    const newState = !photo.is_visible;
+    const { error: togErr } = await toggleVisibility(photo.id, newState);
+    if (togErr) {
+      pushToast(t("admin.customerPhotos.error.toggle"), "error");
+    } else {
+      pushToast(t("admin.customerPhotos.success.visibility"), "success");
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photo.id ? { ...p, is_visible: newState } : p))
+      );
+    }
+  },
+  [t]
+);
+```
+
+<Steps>
+  <Step title="Click Eye Icon">
+    **Eye Open:** Photo is visible → click to hide
+    
+    **Eye Closed:** Photo is hidden → click to show
+  </Step>
+  
+  <Step title="Instant Update">
+    Visibility updates immediately in database
+    
+    Card opacity changes to indicate hidden state
+  </Step>
+</Steps>
+
+**Visual Indicator:**
+
+```jsx
+// CustomerPhotoManager.jsx:266
+className={`photo-manager__card ${!photo.is_visible ? "is-hidden" : ""}`}
+```
+
+Hidden photos display with reduced opacity.
+
+## Reordering Photos
+
+Drag-and-drop reordering changes photo display sequence:
+
+### Drag Operations
+
+<Steps>
+  <Step title="Start Drag">
+    Click and hold on drag handle or photo card
+    
+    ```javascript
+    // CustomerPhotoManager.jsx:142
+    const handleDragStart = useCallback((e, index) => {
+      setDraggedIndex(index);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", index.toString());
+      e.currentTarget.classList.add("is-dragging");
+    }, []);
+    ```
+  </Step>
+  
+  <Step title="Drag Over Target">
+    Drag over desired position
+    
+    Target position highlights
+  </Step>
+  
+  <Step title="Drop to Reorder">
+    Release to move photo
+    
+    ```javascript
+    // CustomerPhotoManager.jsx:171
+    const handleDrop = useCallback(
+      async (e, toIndex) => {
+        e.preventDefault();
+        setDragOverIndex(null);
+
+        if (draggedIndex === null || draggedIndex === toIndex) {
+          setDraggedIndex(null);
+          return;
+        }
+
+        // Reorder locally
+        const reordered = [...photos];
+        const [moved] = reordered.splice(draggedIndex, 1);
+        reordered.splice(toIndex, 0, moved);
+
+        // Update positions
+        const updates = reordered.map((photo, idx) => ({
+          id: photo.id,
+          position: idx,
+        }));
+
+        setPhotos(reordered);
+        setDraggedIndex(null);
+
+        // Persist to database
+        const { error: reorderErr } = await reorderPhotos(updates);
+        if (reorderErr) {
+          pushToast(t("admin.customerPhotos.error.reorder"), "error");
+          await fetchPhotos();
+        } else {
+          pushToast(t("admin.customerPhotos.success.reorder"), "success");
+        }
+      },
+      [draggedIndex, photos, t, fetchPhotos]
+    );
+    ```
+  </Step>
+  
+  <Step title="Position Update">
+    All affected photos update their positions
+    
+    Changes persist to database
+  </Step>
+</Steps>
+
+<Note>
+Reordering updates all photo positions in a single batch operation for efficiency.
+</Note>
+
+### Visual Feedback
+
+**Dragging State:**
+- Dragged photo: `.is-dragging` class
+- Drop target: `.drag-over` class
+- Upload zone: `.is-dragging` class when files hover
+
+## Deleting Photos
+
+<Warning>
+Deleting a photo removes it from storage and the database permanently. This action cannot be undone.
+</Warning>
+
+<Steps>
+  <Step title="Click Trash Icon">
+    Click delete button on photo card
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    Confirm in browser dialog
+    
+    ```javascript
+    // CustomerPhotoManager.jsx:111
+    if (!confirm(t("admin.customerPhotos.confirmDelete"))) return;
+    ```
+  </Step>
+  
+  <Step title="Delete from Storage">
+    Photo removed from Supabase Storage bucket
+    
+    Database record deleted
+    
+    ```javascript
+    const { error: delErr } = await deletePhoto(photo.id, photo.image_url);
+    if (delErr) {
+      pushToast(t("admin.customerPhotos.error.delete"), "error");
+    } else {
+      pushToast(t("admin.customerPhotos.success.delete"), "success");
+      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    }
+    ```
+  </Step>
+</Steps>
+
+## Reorder Hint
+
+When multiple photos exist, a hint displays:
+
+```jsx
+// CustomerPhotoManager.jsx:248
+{photos.length > 1 && (
+  <p className="photo-manager__reorder-hint">
+    {t("admin.customerPhotos.reorderHint")}
+  </p>
+)}
+```
+
+Prompts users to drag photos to change order.
+
+## Empty State
+
+When no photos exist:
+
+```jsx
+// CustomerPhotoManager.jsx:256
+<div className="photo-wall__empty">
+  <Upload size={48} strokeWidth={1} />
+  <h3>{t("admin.customerPhotos.empty.title")}</h3>
+  <p>{t("admin.customerPhotos.empty.description")}</p>
+</div>
+```
+
+Shows upload icon and prompt to add first photo.
+
+## Loading States
+
+**Upload in Progress:**
+
+```jsx
+// CustomerPhotoManager.jsx:228
+{uploading ? (
+  <p>{t("admin.common.loading")}</p>
+) : (
+  // Upload zone content
+)}
+```
+
+**Data Loading:**
+- LoadingMessage component during initial fetch
+- ErrorMessage with retry if fetch fails
+
+## Image Optimization
+
+Photos use lazy loading:
+
+```jsx
+// CustomerPhotoManager.jsx:290
+<img
+  src={photo.image_url}
+  alt={t("admin.customerPhotos.photoAlt", { position: index + 1 })}
+  className="photo-manager__card-image"
+  loading="lazy"
+/>
+```
+
+Improves page performance with many photos.
+
+## Accessibility
+
+**Keyboard Navigation:**
+
+```jsx
+// CustomerPhotoManager.jsx:221
+onKeyDown={(e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    handleUploadClick();
+  }
+}}
+```
+
+Upload zone accessible via keyboard.
+
+**ARIA Labels:**
+- Action buttons have descriptive labels
+- Alt text includes position numbers
+
+## Photo Display Order
+
+Photos are fetched ordered by position:
+
+```javascript
+// services/adminCustomerPhotos.js (referenced)
+// SELECT * FROM customer_photos ORDER BY position ASC
+```
+
+Lowest position number displays first in grid.

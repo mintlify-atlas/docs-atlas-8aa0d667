@@ -1,0 +1,278 @@
+---
+title: Order Management
+description: View, process, and update customer orders with detailed order information
+---
+
+The Order Manager provides comprehensive tools for tracking and managing customer orders.
+
+## Order List View
+
+### Order Metrics
+
+Four key metrics display at the top:
+
+```javascript
+// OrderManager.jsx:81
+const metrics = useMemo(() => {
+  const total = allOrders.length;
+  const pending = allOrders.filter(o => o.status === 'pending').length;
+  const paid = allOrders.filter(o => o.status === 'paid').length;
+  const revenue = allOrders.reduce((sum, o) => sum + Number(o.total || calculateOrderTotal(o.order_items) || 0), 0);
+  return { total, pending, paid, revenue };
+}, [allOrders]);
+```
+
+**Displays:**
+- Total order count
+- Pending orders requiring action
+- Paid orders
+- Estimated revenue (sum of all order totals)
+
+### Order Table
+
+Columns displayed:
+- **ID** - First 8 characters of order UUID
+- **Client** - Email from user account or `customer_email`
+- **Date** - Created timestamp formatted via `formatDate()`
+- **Total** - Order amount in currency (default EUR)
+- **Status** - Colored status chip
+- **Actions** - "Details" button
+
+**Implementation:** `OrderManager.jsx:146`
+
+### Status Filtering
+
+Dropdown filter for order status:
+
+```javascript
+// OrderManager.jsx:76
+useEffect(() => {
+  const filtered = filterStatus === 'all' ? allOrders : allOrders.filter(o => o.status === filterStatus);
+  setOrders(filtered);
+}, [filterStatus, allOrders]);
+```
+
+**Status Options:**
+- All statuses
+- Pending
+- Paid
+- Shipped
+- Delivered
+- Cancelled
+- Refunded
+
+<Info>
+Status options are defined in `utils/orderStatus.js` as `ORDER_STATUS_OPTIONS`.
+</Info>
+
+## Order Details Modal
+
+Click "Details" or click row to open detailed order view.
+
+### Header Section
+
+- Order ID chip (first 8 characters)
+- Order details title
+- Creation date
+- Current status badge
+- Close button
+
+**Implementation:** `OrderManager.jsx:190`
+
+### Information Cards
+
+<Steps>
+  <Step title="Client Information">
+    **Fields:**
+    - Email: `user.email` or `customer_email`
+    - Name: `user.first_name` + `user.last_name` or "Guest Client"
+    - Phone: `customer_phone`
+  </Step>
+  
+  <Step title="Shipping Address">
+    Formatted address from `shipping_address` object:
+    
+    ```javascript
+    // OrderManager.jsx:58
+    const formatAddress = useCallback(addr => {
+      if (!addr) return t('admin.orders.notProvided');
+      if (typeof addr === 'string') return addr;
+      const parts = [
+        addr.name,
+        addr.line1,
+        addr.line2,
+        addr.postal_code && `${addr.postal_code} ${addr.city || ''}`.trim(),
+        addr.state,
+        addr.country,
+      ].filter(Boolean);
+      return parts.length ? parts.join(', ') : t('admin.orders.notProvided');
+    }, [t]);
+    ```
+  </Step>
+  
+  <Step title="Payment Method">
+    **Fields:**
+    - Payment Intent ID: `payment_intent_id`
+    - Currency: `currency` (uppercase)
+  </Step>
+</Steps>
+
+### Order Items Section
+
+Displays all items in the order:
+
+**Item Information:**
+- Product name: `items.name`
+- Variant details: `item_variants.size` and `item_variants.sku`
+- Quantity
+- Unit price: `unit_price` or fallback to variant/item price
+- Line total (quantity × unit price)
+
+**Order Total:** Sum of all line totals
+
+```javascript
+// OrderManager.jsx:50
+const calculateOrderTotal = orderItems => {
+  if (!orderItems?.length) return 0;
+  return orderItems.reduce((total, item) => {
+    const unit = item.unit_price ?? item.items?.price ?? item.item_variants?.price ?? 0;
+    return total + item.quantity * Number(unit);
+  }, 0);
+};
+```
+
+<Note>
+The total is calculated from `order_items` to handle cases where the `total` field may be missing.
+</Note>
+
+## Status Management
+
+### Updating Order Status
+
+Status dropdown at bottom of modal:
+
+```javascript
+// OrderManager.jsx:34
+const updateOrderStatusRecompute = async (orderId, newStatus) => {
+  try {
+    const { error: err } = await updateOrderStatus(orderId, newStatus);
+    if (err) throw err;
+    fetchOrders();
+    
+    if (selectedOrder && selectedOrder.id === orderId) {
+      setSelectedOrder({ ...selectedOrder, status: newStatus });
+    }
+    pushToast({ message: t('admin.orders.success.statusUpdated'), variant: 'success' });
+  } catch (err) {
+    console.error('Order status update error:', err);
+    pushToast({ message: t('admin.orders.error.statusUpdate'), variant: 'error' });
+  }
+};
+```
+
+<Steps>
+  <Step title="Select New Status">
+    Choose from status dropdown in modal footer
+  </Step>
+  
+  <Step title="Automatic Update">
+    Status updates immediately on selection
+    
+    No separate save button required
+  </Step>
+  
+  <Step title="UI Refresh">
+    Order list and modal update to show new status
+  </Step>
+</Steps>
+
+### Status Styling
+
+Statuses have color-coded chips:
+
+```javascript
+// utils/orderStatus.js (referenced)
+const getStatusStyle = (status) => {
+  // Returns inline styles with background and text colors
+  // Different colors for: pending, paid, shipped, delivered, cancelled, refunded
+}
+```
+
+**Implementation:** `OrderManager.jsx:169`
+
+## Refresh Functionality
+
+Manual refresh button to reload order list:
+
+```jsx
+// OrderManager.jsx:105
+<button className="btn btn-outline" onClick={fetchOrders} aria-label={t('admin.orders.manager.refresh')}>
+  {t('admin.orders.manager.refresh')}
+</button>
+```
+
+## Date Formatting
+
+Dates are formatted using the `formatDate` utility:
+
+```javascript
+// utils/formatters.js (referenced)
+formatDate(order.created_at)
+formatDate(order.updated_at || order.created_at)
+```
+
+## Currency Formatting
+
+Monetary values use the `formatMoney` utility:
+
+```javascript
+// utils/formatters.js (referenced)
+formatMoney(order.total, order.currency || 'EUR')
+```
+
+<Warning>
+Ensure currency codes are valid ISO codes (EUR, USD, etc.) to prevent formatting errors.
+</Warning>
+
+## Empty States
+
+When no orders match filters:
+
+```jsx
+// OrderManager.jsx:142
+{orders.length === 0 ? (
+  <p className="order-empty">{t('admin.orders.manager.empty')}</p>
+) : (
+  // Table content
+)}
+```
+
+Shows "No orders found" message.
+
+## Guest vs. Registered Customers
+
+Orders differentiate between:
+
+**Registered Users:**
+- Have `user` object with `email`, `first_name`, `last_name`
+- User ID references `users` table
+
+**Guest Customers:**
+- No `user` object
+- Email stored in `customer_email`
+- Name shown as "Guest Client"
+
+**Check:** `order.user ? ... : ...`
+
+## Last Update Timestamp
+
+Modal footer shows last modification:
+
+```jsx
+// OrderManager.jsx:257
+<p className="order-meta">
+  {t('admin.orders.manager.lastUpdateOn', { date: formatDate(selectedOrder.updated_at || selectedOrder.created_at) })}
+</p>
+```
+
+Falls back to `created_at` if `updated_at` is null.

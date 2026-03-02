@@ -1,0 +1,259 @@
+---
+title: "Authentication"
+description: "Secure user authentication with Supabase Auth and role-based access control"
+---
+
+## Overview
+
+Sabbels Handmade uses Supabase Authentication to provide secure user management with role-based access control. The system supports two user roles: **client** (default) and **admin**, with Row Level Security (RLS) policies enforcing access permissions at the database level.
+
+## User Roles
+
+The platform implements a simple but effective two-tier role system:
+
+<Info>
+  New users are automatically assigned the **client** role upon registration. Admin privileges must be granted manually through the database.
+</Info>
+
+### Client Role
+
+Default role for all registered users with the following permissions:
+
+- View all public product data (items, categories, colors, variants)
+- Create and manage their own orders
+- View their own order history
+- Submit product ratings and reviews
+- Update their own user profile
+
+### Admin Role
+
+Elevated permissions for shop administrators:
+
+- Full CRUD access to products, categories, and inventory
+- View and manage all orders from all customers
+- Access payment and webhook data
+- Manage product images in Storage
+- Update customer photo wall
+- Delete or modify any user data
+
+## Authentication Flow
+
+### Session Management
+
+The `AuthContext` provider manages authentication state throughout the application:
+
+<CodeGroup>
+
+```jsx AuthContext.jsx
+import { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '../supabase/supabaseClient';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [session, setSession] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (data.session) {
+        fetchUserData(data.session.user);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchUserData(session.user);
+      } else {
+        setUserData(null);
+      }
+    });
+
+    return () => listener?.subscription.unsubscribe();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ session, userData, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+</CodeGroup>
+
+### User Profile Creation
+
+When a user authenticates for the first time, their profile is automatically created in the `users` table:
+
+```javascript
+const fetchUserData = async (user) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email, role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (!data) {
+    // Create new user profile with default 'client' role
+    await supabase
+      .from('users')
+      .upsert({ id: user.id, email: user.email, role: 'client' })
+      .select('id, email, role')
+      .single();
+  }
+};
+```
+
+## Row Level Security (RLS)
+
+All database tables have RLS enabled to enforce access control at the database layer. This provides security even if client-side validation is bypassed.
+
+### Admin Helper Function
+
+A SQL security definer function checks admin status:
+
+```sql
+create or replace function public.is_admin(uid uuid)
+returns boolean
+language sql
+stable
+security definer as $$
+  select exists (
+    select 1 from public.users u 
+    where u.id = uid and u.role = 'admin'
+  );
+$$;
+```
+
+### Example RLS Policies
+
+<Tabs>
+  <Tab title="Users Table">
+    ```sql
+    -- Users can read their own profile or admins can read all
+    create policy "Users: select own or admin" on public.users for select
+      to authenticated 
+      using ( id = auth.uid() or public.is_admin(auth.uid()) );
+
+    -- Users can update their own profile or admins can update any
+    create policy "Users: update self or admin" on public.users for update
+      to authenticated 
+      using ( id = auth.uid() or public.is_admin(auth.uid()) );
+    ```
+  </Tab>
+  <Tab title="Items Table">
+    ```sql
+    -- Everyone can read items (public catalog)
+    create policy "Items: public read" on public.items for select
+      to anon, authenticated 
+      using (true);
+
+    -- Only admins can create, update, delete items
+    create policy "Items: admin write" on public.items for all
+      to authenticated 
+      using ( public.is_admin(auth.uid()) )
+      with check ( public.is_admin(auth.uid()) );
+    ```
+  </Tab>
+  <Tab title="Orders Table">
+    ```sql
+    -- Users can read their own orders, admins can read all
+    create policy "Orders: read own or admin" on public.orders for select
+      to authenticated 
+      using ( user_id = auth.uid() or public.is_admin(auth.uid()) );
+
+    -- Users can create orders for themselves
+    create policy "Orders: create own or admin" on public.orders for insert
+      to authenticated 
+      with check ( user_id = auth.uid() or public.is_admin(auth.uid()) );
+
+    -- Only admins can update or delete orders
+    create policy "Orders: admin update" on public.orders for update
+      to authenticated 
+      using ( public.is_admin(auth.uid()) );
+    ```
+  </Tab>
+</Tabs>
+
+### Storage Policies
+
+The `product-images` storage bucket follows the same pattern:
+
+- **Public read access**: Anyone can view product images
+- **Admin-only write**: Only admins can upload, update, or delete images
+
+```sql
+create policy "Storage: read product-images"
+  on storage.objects for select
+  to anon, authenticated
+  using ( bucket_id = 'product-images' );
+
+create policy "Storage: insert product-images (admin)"
+  on storage.objects for insert
+  to authenticated
+  with check ( bucket_id = 'product-images' and public.is_admin(auth.uid()) );
+```
+
+## Using Authentication in Components
+
+Access the current user's authentication state using the `useAuth` hook:
+
+```jsx
+import { useAuth } from './context/AuthContext';
+
+function MyComponent() {
+  const { session, userData, loading } = useAuth();
+
+  if (loading) return <div>Loading...</div>;
+
+  if (!session) {
+    return <div>Please log in</div>;
+  }
+
+  return (
+    <div>
+      <p>Welcome, {userData?.email}</p>
+      {userData?.role === 'admin' && (
+        <button>Admin Panel</button>
+      )}
+    </div>
+  );
+}
+```
+
+## API Authentication
+
+The backend API validates requests using Bearer tokens:
+
+```javascript server.js:146
+async function getUserFromAuthHeader(authHeader) {
+  if (!authHeader) return null;
+  const token = authHeader.replace('Bearer ', '');
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error) return null;
+  return data.user;
+}
+```
+
+Example usage in a protected endpoint:
+
+```javascript
+app.post('/api/checkout', async (req, res) => {
+  const user = await getUserFromAuthHeader(req.headers.authorization);
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  
+  // Process checkout...
+});
+```
+
+<Note>
+  The API uses the Supabase service role key for server-side operations, which bypasses RLS. Always validate user permissions in your API endpoints.
+</Note>
